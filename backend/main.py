@@ -1,6 +1,9 @@
 from analyzer import run_cppcheck
 from fixer import fix_common_issues
 from validator import validate_code
+import os
+import requests
+import re
 
 INPUT_FILE = "../input/sample.c"
 OUTPUT_FILE = "../fixed_code/fixed_sample.c"
@@ -20,6 +23,26 @@ print(report)
 
 # Fix issues
 fixed_code = fix_common_issues(source_code)
+
+# =====================================
+# AUTOMATIC MEMORY DEALLOCATION FIX
+# =====================================
+
+if "malloc(" in fixed_code and "free(ptr)" not in fixed_code:
+
+    fixed_code = re.sub(
+        r'\breturn\s+0\s*;',
+        """
+if(ptr != NULL)
+{
+    free(ptr);
+    ptr = NULL;
+}
+
+return 0;
+""",
+        fixed_code
+    )
 
 print("\n======== FIXED CODE ========\n")
 print(fixed_code)

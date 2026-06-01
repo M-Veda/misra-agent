@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 fixed_code/
 reports/
+input/uploaded.c
