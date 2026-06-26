@@ -1,81 +1,97 @@
-from fastapi import FastAPI, UploadFile, File
+﻿from pathlib import Path
+import sys
 import shutil
+import uuid
 
-from tools.analyzer_tool import analyzer_tool
-from tools.fixer_tool import fixer_tool
-from tools.validator_tool import validator_tool
-from tools.report_tool import report_tool
+BACKEND_ROOT = Path(__file__).resolve().parent
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
-app = FastAPI()
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 
-INPUT_FILE = "../input/uploaded.c"
-OUTPUT_FILE = "../fixed_code/fixed_uploaded.c"
+from config.settings import INPUT_DIR, ensure_runtime_directories
+from schemas.review import DecisionRequest
+from services.analysis_service import AnalysisService
+from services.review_service import ReviewService
+
+app = FastAPI(title="MISRA AI Agent", version="2.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+analysis_service = AnalysisService()
+review_service = ReviewService()
+ensure_runtime_directories()
+
 
 @app.get("/")
 def home():
-
     return {
-        "message": "MISRA AI Agent Running"
+        "application": "MISRA AI Agent",
+        "status": "running",
+        "workflow": "interactive_review",
     }
 
-@app.post("/analyze")
-async def analyze_code(file: UploadFile = File(...)):
 
-    # Save uploaded file
-    with open(INPUT_FILE, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+@app.post("/upload")
+async def upload_code(file: UploadFile = File(...)):
+    if not file.filename or not file.filename.lower().endswith(".c"):
+        raise HTTPException(status_code=400, detail="Only .c source files are supported.")
 
-    # Run analyzer
-    analysis_result = analyzer_tool(INPUT_FILE)
+    session_id = str(uuid.uuid4())
+    file_path = INPUT_DIR / f"{session_id}.c"
 
-    # Read source code
-    with open(INPUT_FILE, "r") as f:
-        source_code = f.read()
+    try:
+        with file_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        analysis_service.start_analysis(session_id=session_id, file_path=str(file_path))
+        return review_service.status(session_id)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    # Fix code
-    fix_result = fixer_tool(source_code)
 
-    fixed_code = fix_result["fixed_code"]
+@app.get("/review/{session_id}")
+def get_review_status(session_id: str):
+    return _service_call(lambda: review_service.status(session_id))
 
-    # Save fixed code
-    with open(OUTPUT_FILE, "w") as f:
-        f.write(fixed_code)
 
-    # Validate
-    validation_result = validator_tool(OUTPUT_FILE)
+@app.get("/review/{session_id}/explain")
+def explain_current_rule(session_id: str):
+    return _service_call(lambda: review_service.explain_current(session_id))
 
-    # Calculate compliance score
-    violations = analysis_result["report"].splitlines()
 
-    initial_violations = len(violations)
-
-    if validation_result["is_valid"]:
-        remaining_violations = 0
-    else:
-        remaining_violations = len(
-            validation_result["report"].splitlines()
+@app.post("/decision")
+async def submit_decision(payload: DecisionRequest):
+    return _service_call(
+        lambda: review_service.submit(
+            session_id=payload.session_id,
+            action=payload.action,
+            edited_code=payload.edited_code,
+            comment=payload.comment,
         )
+    )
 
-    fixed_violations = initial_violations - remaining_violations
 
-    score = int(
-        (fixed_violations / initial_violations) * 100
-    ) if initial_violations > 0 else 100
+@app.post("/finalize/{session_id}")
+def finalize_review(session_id: str):
+    return _service_call(lambda: review_service.finalize(session_id))
 
-    # Generate report
-    final_report = {
-        "analysis": analysis_result["report"],
-        "validation": validation_result["report"],
-        "is_valid": validation_result["is_valid"],
-        "compliance_score": score
-    }
 
-    report_tool(final_report)
+@app.get("/result/{session_id}")
+def generate_result(session_id: str):
+    return _service_call(lambda: review_service.generate(session_id))
 
-    return {
-        "analysis_report": analysis_result["report"],
-        "fixed_code": fixed_code,
-        "validation_result": validation_result,
-        "compliance_score": score,
-        "original_code": source_code
-    }
+
+def _service_call(callback):
+    try:
+        return callback()
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
