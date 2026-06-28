@@ -22,3 +22,9 @@ class Patch:
     confidence: float = 1.0
     applied: bool = False
     created_at: datetime = field(default_factory=utc_now)
+    status: str = "queued"
+    metadata: dict = field(default_factory=dict)
+    conflict_reason: str = ""
+    applied_at: datetime | None = None
+    rolled_back_at: datetime | None = None
+    history: list[dict] = field(default_factory=list)

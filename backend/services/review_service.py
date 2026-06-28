@@ -56,6 +56,8 @@ class ReviewService:
 
         patch = self._build_patch_for_decision(violation, review_action, edited_code)
         patch_id = patch.patch_id if patch else ""
+        if patch is not None:
+            self.patch_service.enqueue_patch(session, patch)
 
         decision = Decision(
             violation_id=violation.violation_id,
@@ -91,7 +93,11 @@ class ReviewService:
 
         ensure_runtime_directories()
         session["status"] = SessionState.BUILDING.value
-        final_code = self.final_code_service.generate(session["original_code"], session["patches"])
+        final_code = self.final_code_service.generate(
+            session["original_code"],
+            session["patches"],
+            session=session,
+        )
 
         output_file = OUTPUT_DIR / f"{session_id}.c"
         output_file.write_text(final_code, encoding="utf-8")
@@ -100,7 +106,11 @@ class ReviewService:
         session["output_file_path"] = str(output_file)
         session["status"] = SessionState.VALIDATING.value
 
-        validation_result = self.validation_service.validate(output_file)
+        validation_result = self.validation_service.validate(
+            output_file,
+            patches=session.get("patches", []),
+            session=session,
+        )
         session["validation_result"] = validation_result
 
         generated_report = self.report_service.generate(session, validation_result)
@@ -151,6 +161,8 @@ class ReviewService:
             "progress": self._progress(session),
             "original_code": session["original_code"],
             "analysis_report": session.get("analysis_report", ""),
+            "patch_queue": session.get("patch_queue", []),
+            "patch_history": session.get("patch_history", []),
         }
 
     def _final_response(self, session):
