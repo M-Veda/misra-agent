@@ -7,8 +7,9 @@ BACKEND_ROOT = PROJECT_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from models.patch import Patch
+from services.final_code_service import FinalCodeService
 from services.patch_service import PatchService
+from services.review_service import ReviewService
 
 
 class PatchEngineModule3Test(unittest.TestCase):
@@ -96,6 +97,102 @@ class PatchEngineModule3Test(unittest.TestCase):
         self.assertEqual(len(session["patch_queue"]), 1)
         self.assertEqual(session["patch_queue"][0]["patch_id"], patch.patch_id)
         self.assertEqual(len(session["patch_history"]), 1)
+
+    def test_deterministic_execution_order_across_multiple_patches(self):
+        first = self.service.create_patch(
+            violation=self._violation("return 0;", "return 1;", line_number=2),
+            replacement_code="return 1;",
+            strategy="regex_patch",
+            description="Return value change",
+            metadata={"regex_pattern": r"return\s+0;", "regex_replacement": "return 1;"},
+        )
+        second = self.service.create_patch(
+            violation=self._violation("int main()", "int main(void)", line_number=1),
+            replacement_code="int main(void)",
+            strategy="text_patch",
+            description="Prototype change",
+        )
+
+        code = "int main()\n{\n    return 0;\n}\n"
+        result = self.service.apply_patches(code, [first, second])
+
+        self.assertIn("int main(void)", result)
+        self.assertIn("return 1;", result)
+        self.assertEqual(first.status, "applied")
+        self.assertEqual(second.status, "applied")
+
+    def test_multiline_conflict_is_detected(self):
+        first = self.service.create_patch(
+            violation=self._violation("int main()\n{\n    return 0;\n}", "int main(void)\n{\n    return 1;\n}", line_number=1),
+            replacement_code="int main(void)\n{\n    return 1;\n}",
+            strategy="ast_patch",
+            description="Multiline change",
+            metadata={"ast_replacement": "int main(void)\n{\n    return 1;\n}"},
+        )
+        second = self.service.create_patch(
+            violation=self._violation("return 0;", "return 2;", line_number=3),
+            replacement_code="return 2;",
+            strategy="text_patch",
+            description="Conflicting change",
+        )
+
+        code = "int main()\n{\n    return 0;\n}\n"
+        result = self.service.apply_patches(code, [first, second])
+
+        self.assertIn("int main(void)", result)
+        self.assertEqual(second.status, "conflicted")
+
+    def test_failure_recovery_does_not_break_subsequent_patches(self):
+        failing = self.service.create_patch(
+            violation=self._violation("int main()", "int main(void)", line_number=1),
+            replacement_code="int main(void)",
+            strategy="regex_patch",
+            description="Will fail",
+            metadata={},
+        )
+        valid = self.service.create_patch(
+            violation=self._violation("return 0;", "return 1;", line_number=2),
+            replacement_code="return 1;",
+            strategy="regex_patch",
+            description="Valid patch",
+            metadata={"regex_pattern": r"return\s+0;", "regex_replacement": "return 1;"},
+        )
+
+        code = "int main()\n{\n    return 0;\n}\n"
+        result = self.service.apply_patches(code, [failing, valid])
+
+        self.assertIn("return 1;", result)
+        self.assertEqual(failing.status, "conflicted")
+        self.assertEqual(valid.status, "applied")
+
+    def test_review_and_final_code_service_integration(self):
+        review = ReviewService()
+        final_code = FinalCodeService()
+
+        session_id = "module-3-integration"
+        session = {
+            "session_id": session_id,
+            "patch_queue": [],
+            "patch_history": [],
+            "patches": [],
+            "violations": [],
+            "decisions": [],
+            "current_index": 0,
+            "status": "building",
+            "original_code": "int main()\n{\n    return 0;\n}\n",
+        }
+        patch = self.service.create_patch(
+            violation=self._violation("int main()", "int main(void)", line_number=1),
+            replacement_code="int main(void)",
+            strategy="text_patch",
+            description="Prototype update",
+        )
+        review.patch_service.enqueue_patch(session, patch)
+        session["patches"].append(patch)
+        final_code_text = final_code.generate(session["original_code"], session["patches"], session=session)
+
+        self.assertIn("int main(void)", final_code_text)
+        self.assertEqual(len(session["patch_history"]), 2)
 
     def _violation(self, original_code, suggested_code, line_number):
         return type(
