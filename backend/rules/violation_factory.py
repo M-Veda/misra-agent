@@ -10,6 +10,7 @@ def create_violation(rule, file_path, line, original, suggestion="", explanation
         "rationale": rule_metadata.rationale,
         "references": list(rule_metadata.references),
         "priority": rule_metadata.priority,
+        "capabilities": list(rule_metadata.capabilities),
         "rule_metadata": rule_metadata.metadata,
     }
     if metadata:

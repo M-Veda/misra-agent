@@ -1,11 +1,8 @@
-import importlib
-import inspect
-import pkgutil
-
 from config.settings import RULE_ENGINE_CONFIG
 from models.violation import Violation
 from rules.base_rule import BaseRule
 from rules.config import RuleEngineConfig
+from rules.discovery import discover_rule_classes
 from rules.registry import RuleRegistry
 
 
@@ -88,28 +85,7 @@ class RuleEngine:
         return violations
 
     def _discover_package(self, package_name):
-        package = importlib.import_module(package_name)
-        if not hasattr(package, "__path__"):
-            self._register_module_rules(package)
-            return
-
-        for module_info in pkgutil.walk_packages(package.__path__, prefix=f"{package.__name__}."):
-            module_name = module_info.name
-            if module_name.rsplit(".", 1)[-1].startswith("_"):
-                continue
-            module = importlib.import_module(module_name)
-            self._register_module_rules(module)
-
-    def _register_module_rules(self, module):
-        for _, rule_class in inspect.getmembers(module, inspect.isclass):
-            if rule_class is BaseRule:
-                continue
-            if not issubclass(rule_class, BaseRule):
-                continue
-            if rule_class.__module__ != module.__name__:
-                continue
-            if inspect.isabstract(rule_class):
-                continue
+        for rule_class in discover_rule_classes((package_name,)):
             self.registry.register(rule_class)
 
     @staticmethod

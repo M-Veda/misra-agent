@@ -18,6 +18,7 @@ class BaseRule(ABC):
     PRIORITY = 100
     ENABLED_BY_DEFAULT = True
     FIX_STRATEGY = ""
+    CAPABILITIES = ("text",)
     METADATA = {}
 
     @classmethod
@@ -37,6 +38,7 @@ class BaseRule(ABC):
             priority=cls.PRIORITY,
             enabled_by_default=cls.ENABLED_BY_DEFAULT,
             fix_strategy=cls.FIX_STRATEGY,
+            capabilities=tuple(cls.CAPABILITIES or ("text",)),
             metadata=dict(cls.METADATA),
         )
 
@@ -50,6 +52,18 @@ class BaseRule(ABC):
             raise ValueError(f"Rule {cls.__name__} is missing metadata: {', '.join(missing)}")
         if not isinstance(cls.PRIORITY, int) or cls.PRIORITY < 0:
             raise ValueError(f"Rule {cls.__name__} priority must be a non-negative integer.")
+
+        capabilities = getattr(cls, "CAPABILITIES", ("text",))
+        if isinstance(capabilities, str):
+            capabilities = (capabilities,)
+        if not capabilities:
+            capabilities = ("text",)
+        for capability in capabilities:
+            if not isinstance(capability, str):
+                raise TypeError(f"Rule {cls.__name__} capability values must be strings.")
+            normalized = capability.strip().lower()
+            if normalized not in {"text", "ast", "hybrid"}:
+                raise ValueError(f"Rule {cls.__name__} declares unsupported capability {capability!r}.")
 
     @classmethod
     def _chapter_from_rule_id(cls):
@@ -102,3 +116,10 @@ class BaseRule(ABC):
     @property
     def description(self):
         return self.DESCRIPTION
+
+    @property
+    def capabilities(self):
+        return self.metadata().capabilities
+
+    def supports_capability(self, capability):
+        return capability in self.capabilities

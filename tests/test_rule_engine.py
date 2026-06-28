@@ -7,6 +7,7 @@ BACKEND_ROOT = PROJECT_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
+from analyzer.analysis_context import AnalysisContext
 from models.violation import Violation
 from rules.base_rule import BaseRule
 from rules.config import RuleEngineConfig
@@ -129,6 +130,84 @@ class RuleEngineModule2Test(unittest.TestCase):
         rule = RuleEngine().get_rule("8.1")
 
         self.assertFalse(config.allows(rule))
+
+    def test_metadata_validation_rejects_unknown_capabilities(self):
+        class InvalidCapabilityRule(BaseRule):
+            RULE_ID = "97.1"
+            TITLE = "Invalid capability rule"
+            CHAPTER = "97"
+            CATEGORY = "Synthetic"
+            SEVERITY = "Required"
+            DESCRIPTION = "Used to verify capability validation."
+            CAPABILITIES = ("invalid",)
+
+            def check(self, code, file_path):
+                return []
+
+        with self.assertRaises(ValueError):
+            InvalidCapabilityRule.metadata()
+
+    def test_discovers_new_rule_plugins_from_package(self):
+        engine = RuleEngine(packages=("tests.rules.sample_plugin",))
+
+        self.assertTrue(any(rule.rule_id == "99.1" for rule in engine.get_rules(include_disabled=True)))
+
+    def test_executes_ast_aware_text_and_hybrid_rules(self):
+        class ASTAwareRule(BaseRule):
+            RULE_ID = "90.1"
+            TITLE = "AST aware rule"
+            CHAPTER = "90"
+            CATEGORY = "Synthetic"
+            SEVERITY = "Required"
+            DESCRIPTION = "Exercises AST-aware execution."
+            CAPABILITIES = ("ast",)
+
+            def check(self, code, file_path):
+                return []
+
+            def check_with_context(self, code, file_path, analysis_context=None):
+                return [self.create_violation(file_path=file_path, line=1, original=code.strip(), metadata={"analysis_available": bool(analysis_context and analysis_context.available)})]
+
+        class TextRule(BaseRule):
+            RULE_ID = "90.2"
+            TITLE = "Text rule"
+            CHAPTER = "90"
+            CATEGORY = "Synthetic"
+            SEVERITY = "Required"
+            DESCRIPTION = "Exercises text-only execution."
+            CAPABILITIES = ("text",)
+
+            def check(self, code, file_path):
+                return [self.create_violation(file_path=file_path, line=1, original=code.strip())]
+
+        class HybridRule(BaseRule):
+            RULE_ID = "90.3"
+            TITLE = "Hybrid rule"
+            CHAPTER = "90"
+            CATEGORY = "Synthetic"
+            SEVERITY = "Required"
+            DESCRIPTION = "Exercises hybrid execution."
+            CAPABILITIES = ("text", "ast")
+
+            def check(self, code, file_path):
+                return []
+
+            def check_with_context(self, code, file_path, analysis_context=None):
+                return [self.create_violation(file_path=file_path, line=1, original=code.strip(), metadata={"hybrid": True, "analysis_available": bool(analysis_context and analysis_context.available)})]
+
+        engine = RuleEngine(config={"enabled_rules": []})
+        engine.registry.clear()
+        engine.registry.register(ASTAwareRule)
+        engine.registry.register(TextRule)
+        engine.registry.register(HybridRule)
+
+        context = AnalysisContext(file_path="unit.c", source_code="int main() { return 0; }", available=True)
+        violations = engine.execute("int main() { return 0; }", "unit.c", analysis_context=context)
+
+        self.assertEqual(len(violations), 3)
+        self.assertEqual({violation.rule_id for violation in violations}, {"90.1", "90.2", "90.3"})
+        self.assertTrue(any(violation.metadata.get("analysis_available") for violation in violations))
+        self.assertTrue(any(violation.metadata.get("hybrid") for violation in violations))
 
 
 if __name__ == "__main__":

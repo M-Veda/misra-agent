@@ -22,6 +22,8 @@ class RuleEngineConfig:
     disabled_chapters: Set[str] = field(default_factory=set)
     enabled_categories: Optional[Set[str]] = None
     disabled_categories: Set[str] = field(default_factory=set)
+    enabled_capabilities: Optional[Set[str]] = None
+    disabled_capabilities: Set[str] = field(default_factory=set)
     minimum_priority: Optional[int] = None
 
     def __post_init__(self):
@@ -31,6 +33,8 @@ class RuleEngineConfig:
         object.__setattr__(self, "disabled_chapters", _normalize_required(self.disabled_chapters))
         object.__setattr__(self, "enabled_categories", _normalize(self.enabled_categories))
         object.__setattr__(self, "disabled_categories", _normalize_required(self.disabled_categories))
+        object.__setattr__(self, "enabled_capabilities", _normalize(self.enabled_capabilities))
+        object.__setattr__(self, "disabled_capabilities", _normalize_required(self.disabled_capabilities))
 
     @classmethod
     def from_mapping(cls, data):
@@ -42,6 +46,8 @@ class RuleEngineConfig:
             disabled_chapters=set(data.get("disabled_chapters") or []),
             enabled_categories=set(data.get("enabled_categories") or []) or None,
             disabled_categories=set(data.get("disabled_categories") or []),
+            enabled_capabilities=set(data.get("enabled_capabilities") or []) or None,
+            disabled_capabilities=set(data.get("disabled_capabilities") or []),
             minimum_priority=data.get("minimum_priority"),
         )
 
@@ -60,6 +66,14 @@ class RuleEngineConfig:
             return False
         if rule_metadata.category in self.disabled_categories:
             return False
+        if self.enabled_capabilities is not None:
+            if not rule_metadata.capabilities:
+                return False
+            if not set(rule_metadata.capabilities).intersection(self.enabled_capabilities):
+                return False
+        if self.disabled_capabilities:
+            if set(rule_metadata.capabilities).intersection(self.disabled_capabilities):
+                return False
         if self.minimum_priority is not None and rule_metadata.priority < self.minimum_priority:
             return False
         return True
