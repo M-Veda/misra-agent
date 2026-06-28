@@ -2,6 +2,7 @@ import re
 from abc import ABC, abstractmethod
 from typing import Dict, Optional
 
+from analyzer.ast_transformer import ASTTransformer
 from patch_engine.interfaces import PatchStrategy
 
 
@@ -46,9 +47,14 @@ class RegexPatchStrategy(BasePatchStrategy):
 class ASTPatchStrategy(BasePatchStrategy):
     name = "ast_patch"
 
+    def __init__(self):
+        self.transformer = ASTTransformer()
+
     def apply(self, code, patch):
         if patch.metadata.get("ast_replacement"):
             return patch.metadata["ast_replacement"]
+        if getattr(patch, "metadata", None) and patch.metadata.get("analysis_context"):
+            return self.transformer.transform(patch.metadata["analysis_context"], patch)
         if patch.replacement_code:
             return patch.replacement_code
         raise ValueError("AST patch requires explicit ast_replacement metadata.")

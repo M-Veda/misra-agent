@@ -52,7 +52,7 @@ class RuleEngine:
     def registered_rules(self):
         return len(self.registry)
 
-    def execute(self, code, file_path, rule_ids=None):
+    def execute(self, code, file_path, rule_ids=None, analysis_context=None):
         selected_rule_ids = {str(rule_id) for rule_id in rule_ids} if rule_ids else None
         violations = []
 
@@ -62,7 +62,14 @@ class RuleEngine:
                 continue
 
             rule = rule_class()
-            result = rule.check(code=code, file_path=file_path)
+            result = None
+            try:
+                if hasattr(rule, "check_with_context"):
+                    result = rule.check_with_context(code=code, file_path=file_path, analysis_context=analysis_context)
+                else:
+                    result = rule.check(code=code, file_path=file_path)
+            except TypeError:
+                result = rule.check(code=code, file_path=file_path)
             if result is None:
                 continue
 

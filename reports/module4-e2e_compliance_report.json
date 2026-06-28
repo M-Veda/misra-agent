@@ -1,0 +1,197 @@
+{
+    "session_id": "module4-e2e",
+    "misra_version": "MISRA C:2012",
+    "source_file": "C:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\input\\sample.c",
+    "output_file": "C:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\fixed_code\\module4-e2e.c",
+    "total_violations": 1,
+    "reviewed_violations": 1,
+    "accepted": 1,
+    "rejected": 0,
+    "skipped": 0,
+    "applied_patches": 1,
+    "conflicted_patches": 0,
+    "patch_queue": [
+        {
+            "patch_id": "1eb9d105-7a6e-4d33-9b47-28b1c32c99a2",
+            "violation_id": "95782751-87bd-44e2-b161-7d8ffb936f33",
+            "rule_id": "8.1",
+            "strategy": "prototype_void_parameter",
+            "description": "Function shall have prototype",
+            "status": "queued"
+        },
+        {
+            "patch_id": "1eb9d105-7a6e-4d33-9b47-28b1c32c99a2",
+            "violation_id": "95782751-87bd-44e2-b161-7d8ffb936f33",
+            "rule_id": "8.1",
+            "strategy": "prototype_void_parameter",
+            "description": "Function shall have prototype",
+            "status": "queued"
+        }
+    ],
+    "patch_history": [
+        {
+            "event": "queued",
+            "patch_id": "1eb9d105-7a6e-4d33-9b47-28b1c32c99a2",
+            "strategy": "prototype_void_parameter",
+            "description": "Function shall have prototype",
+            "status": "queued",
+            "timestamp": "2026-06-28T08:29:26.552894+00:00",
+            "details": {}
+        },
+        {
+            "event": "queued",
+            "patch_id": "1eb9d105-7a6e-4d33-9b47-28b1c32c99a2",
+            "strategy": "prototype_void_parameter",
+            "description": "Function shall have prototype",
+            "status": "queued",
+            "timestamp": "2026-06-28T08:29:26.553480+00:00",
+            "details": {}
+        }
+    ],
+    "compliance_score": 0,
+    "validation": {
+        "is_valid": false,
+        "report": "C:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\fixed_code\\module4-e2e.c:21:12: error: Array 'arr[5]' accessed at index 5, which is out of bounds. [arrayIndexOutOfBounds]\nC:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\fixed_code\\module4-e2e.c:26:5: warning: Obsolete function 'gets' called. It is recommended to use 'fgets' or 'gets_s' instead. [getsCalled]\nC:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\fixed_code\\module4-e2e.c:8:10: style: Condition 'a=5' is always true [knownConditionTrueFalse]\nC:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\fixed_code\\module4-e2e.c:26:10: warning: If memory allocation fails, then there is a possible null pointer dereference: ptr [nullPointerOutOfMemory]\nC:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\fixed_code\\module4-e2e.c:8:10: style: Variable 'a' is assigned a value that is never used. [unreadVariable]\nC:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\fixed_code\\module4-e2e.c:21:16: style: Variable 'arr[i]' is assigned a value that is never used. [unreadVariable]\nC:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\fixed_code\\module4-e2e.c:6:6: style: The function 'func' should have static linkage since it is not used outside of its translation unit. [staticFunction]",
+        "issues": [
+            "C:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\fixed_code\\module4-e2e.c:21:12: error: Array 'arr[5]' accessed at index 5, which is out of bounds. [arrayIndexOutOfBounds]",
+            "C:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\fixed_code\\module4-e2e.c:26:5: warning: Obsolete function 'gets' called. It is recommended to use 'fgets' or 'gets_s' instead. [getsCalled]",
+            "C:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\fixed_code\\module4-e2e.c:8:10: style: Condition 'a=5' is always true [knownConditionTrueFalse]",
+            "C:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\fixed_code\\module4-e2e.c:26:10: warning: If memory allocation fails, then there is a possible null pointer dereference: ptr [nullPointerOutOfMemory]",
+            "C:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\fixed_code\\module4-e2e.c:8:10: style: Variable 'a' is assigned a value that is never used. [unreadVariable]",
+            "C:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\fixed_code\\module4-e2e.c:21:16: style: Variable 'arr[i]' is assigned a value that is never used. [unreadVariable]",
+            "C:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\fixed_code\\module4-e2e.c:6:6: style: The function 'func' should have static linkage since it is not used outside of its translation unit. [staticFunction]"
+        ],
+        "patch_summary": {
+            "applied": 1,
+            "conflicted": 0,
+            "queued": 0
+        },
+        "patch_history": [
+            {
+                "event": "queued",
+                "patch_id": "1eb9d105-7a6e-4d33-9b47-28b1c32c99a2",
+                "strategy": "prototype_void_parameter",
+                "description": "Function shall have prototype",
+                "status": "queued",
+                "timestamp": "2026-06-28T08:29:26.552894+00:00",
+                "details": {}
+            },
+            {
+                "event": "queued",
+                "patch_id": "1eb9d105-7a6e-4d33-9b47-28b1c32c99a2",
+                "strategy": "prototype_void_parameter",
+                "description": "Function shall have prototype",
+                "status": "queued",
+                "timestamp": "2026-06-28T08:29:26.553480+00:00",
+                "details": {}
+            }
+        ]
+    },
+    "violations": [
+        {
+            "violation_id": "95782751-87bd-44e2-b161-7d8ffb936f33",
+            "rule_id": "8.1",
+            "title": "Function shall have prototype",
+            "description": "Functions shall have prototype-form declarations with explicit parameter lists.",
+            "severity": "Required",
+            "category": "Declarations and definitions",
+            "file_path": "C:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\input\\sample.c",
+            "line_number": 14,
+            "column_number": 0,
+            "original_code": "int main()",
+            "suggested_code": "int main(void)",
+            "explanation": "Use an explicit parameter list so the function prototype is fully specified.",
+            "auto_fixable": true,
+            "approved": true,
+            "applied": false,
+            "confidence": 1.0,
+            "fix_strategy": "prototype_void_parameter",
+            "patch_id": "1eb9d105-7a6e-4d33-9b47-28b1c32c99a2",
+            "tags": [
+                "chapter:8",
+                "priority:30"
+            ],
+            "metadata": {
+                "chapter": "8",
+                "rationale": "Explicit parameter lists prevent implicit function interfaces and make type checking reliable.",
+                "references": [
+                    "MISRA C:2012 Rule 8.1"
+                ],
+                "priority": 30,
+                "rule_metadata": {
+                    "chapter_title": "Declarations and definitions",
+                    "analysis": "regex"
+                }
+            },
+            "created_at": "2026-06-28T08:29:26.531410+00:00"
+        }
+    ],
+    "decisions": [
+        {
+            "violation_id": "95782751-87bd-44e2-b161-7d8ffb936f33",
+            "action": "accept",
+            "patch_id": "1eb9d105-7a6e-4d33-9b47-28b1c32c99a2",
+            "edited_code": "",
+            "comment": "",
+            "reviewed_at": "2026-06-28T08:29:26.552912+00:00"
+        }
+    ],
+    "patches": [
+        {
+            "patch_id": "1eb9d105-7a6e-4d33-9b47-28b1c32c99a2",
+            "violation_id": "95782751-87bd-44e2-b161-7d8ffb936f33",
+            "rule_id": "8.1",
+            "file_path": "C:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\input\\sample.c",
+            "line_number": 14,
+            "original_code": "int main()",
+            "replacement_code": "int main(void)",
+            "description": "Function shall have prototype",
+            "strategy": "prototype_void_parameter",
+            "confidence": 1.0,
+            "applied": true,
+            "created_at": "2026-06-28T08:29:26.552881+00:00",
+            "status": "applied",
+            "metadata": {},
+            "conflict_reason": "",
+            "applied_at": "2026-06-28T08:29:26.553512+00:00",
+            "rolled_back_at": null,
+            "history": [
+                {
+                    "event": "created",
+                    "strategy": "prototype_void_parameter",
+                    "description": "Function shall have prototype"
+                },
+                {
+                    "event": "queued",
+                    "patch_id": "1eb9d105-7a6e-4d33-9b47-28b1c32c99a2",
+                    "strategy": "prototype_void_parameter",
+                    "description": "Function shall have prototype",
+                    "status": "queued",
+                    "timestamp": "2026-06-28T08:29:26.552894+00:00",
+                    "details": {}
+                },
+                {
+                    "event": "queued",
+                    "patch_id": "1eb9d105-7a6e-4d33-9b47-28b1c32c99a2",
+                    "strategy": "prototype_void_parameter",
+                    "description": "Function shall have prototype",
+                    "status": "queued",
+                    "timestamp": "2026-06-28T08:29:26.553480+00:00",
+                    "details": {}
+                },
+                {
+                    "event": "applied",
+                    "patch_id": "1eb9d105-7a6e-4d33-9b47-28b1c32c99a2",
+                    "strategy": "prototype_void_parameter",
+                    "description": "Function shall have prototype",
+                    "status": "applied",
+                    "timestamp": "2026-06-28T08:29:26.553513+00:00",
+                    "details": {
+                        "order": 1
+                    }
+                }
+            ]
+        }
+    ],
+    "analysis_report": "C:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\input\\sample.c:21:12: error: Array 'arr[5]' accessed at index 5, which is out of bounds. [arrayIndexOutOfBounds]\nC:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\input\\sample.c:26:5: warning: Obsolete function 'gets' called. It is recommended to use 'fgets' or 'gets_s' instead. [getsCalled]\nC:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\input\\sample.c:8:10: style: Condition 'a=5' is always true [knownConditionTrueFalse]\nC:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\input\\sample.c:26:10: warning: If memory allocation fails, then there is a possible null pointer dereference: ptr [nullPointerOutOfMemory]\nC:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\input\\sample.c:8:10: style: Variable 'a' is assigned a value that is never used. [unreadVariable]\nC:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\input\\sample.c:21:16: style: Variable 'arr[i]' is assigned a value that is never used. [unreadVariable]\nC:\\Users\\saite\\OneDrive\\Desktop\\misra-ai-agent\\input\\sample.c:6:6: style: The function 'func' should have static linkage since it is not used outside of its translation unit. [staticFunction]"
+}

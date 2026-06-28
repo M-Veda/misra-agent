@@ -59,6 +59,9 @@ class BaseRule(ABC):
     def check(self, code: str, file_path: str):
         """Return a list of Violation objects for this rule."""
 
+    def check_with_context(self, code: str, file_path: str, analysis_context=None):
+        return self.check(code=code, file_path=file_path)
+
     def suggest_fix(self, violation):
         return None
 
