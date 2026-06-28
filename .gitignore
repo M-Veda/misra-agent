@@ -1,6 +1,48 @@
-venv/
+# Python
 __pycache__/
 *.pyc
-fixed_code/
-reports/
-input/uploaded.c
+*.pyo
+*.pyd
+
+# Virtual Environment
+venv/
+.venv/
+
+# VS Code
+.vscode/
+
+# JetBrains
+.idea/
+
+# Streamlit
+.streamlit/cache/
+
+# pytest
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+
+# Build
+build/
+dist/
+
+# Logs
+*.log
+
+# Environment
+.env
+
+# GitHub
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Temporary
+*.tmp

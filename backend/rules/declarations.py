@@ -1,15 +1,21 @@
-﻿import re
+import re
 
 from rules.base_rule import BaseRule
-from utils.violation_factory import create_violation
 
 
 class Rule81(BaseRule):
     RULE_ID = "8.1"
     TITLE = "Function shall have prototype"
-    CATEGORY = "Declarations"
+    CHAPTER = "8"
+    CATEGORY = "Declarations and definitions"
     SEVERITY = "Required"
-    DESCRIPTION = "Detect function declarations or definitions that use an empty parameter list."
+    DESCRIPTION = "Functions shall have prototype-form declarations with explicit parameter lists."
+    RATIONALE = "Explicit parameter lists prevent implicit function interfaces and make type checking reliable."
+    FIXABLE = True
+    REFERENCES = ("MISRA C:2012 Rule 8.1",)
+    PRIORITY = 30
+    FIX_STRATEGY = "prototype_void_parameter"
+    METADATA = {"chapter_title": "Declarations and definitions", "analysis": "regex"}
 
     PATTERN = r'^[^\S\n]*[A-Za-z_][\w\s\*]*\s+[A-Za-z_]\w*\s*\(\s*\)\s*$'
 
@@ -22,8 +28,7 @@ class Rule81(BaseRule):
             suggestion = re.sub(r'\(\s*\)', '(void)', original, count=1)
 
             violations.append(
-                create_violation(
-                    rule=self,
+                self.create_violation(
                     file_path=file_path,
                     line=line,
                     original=original,
@@ -36,45 +41,3 @@ class Rule81(BaseRule):
 
     def suggest_fix(self, violation):
         return violation.suggested_code or None
-
-
-class Rule82(BaseRule):
-    RULE_ID = "8.2"
-    TITLE = "Reserved"
-    CATEGORY = "Declarations"
-    SEVERITY = "Required"
-    DESCRIPTION = ""
-
-    def check(self, code, file_path):
-        return []
-
-    def suggest_fix(self, violation):
-        return None
-
-
-class Rule83(BaseRule):
-    RULE_ID = "8.3"
-    TITLE = "Reserved"
-    CATEGORY = "Declarations"
-    SEVERITY = "Required"
-    DESCRIPTION = ""
-
-    def check(self, code, file_path):
-        return []
-
-    def suggest_fix(self, violation):
-        return None
-
-
-class Rule84(BaseRule):
-    RULE_ID = "8.4"
-    TITLE = "Compatible declaration shall be visible"
-    CATEGORY = "Declarations"
-    SEVERITY = "Required"
-    DESCRIPTION = ""
-
-    def check(self, code, file_path):
-        return []
-
-    def suggest_fix(self, violation):
-        return None

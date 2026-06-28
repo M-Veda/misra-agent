@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -14,6 +14,16 @@ MISRA_VERSION = "MISRA C:2012"
 ENABLE_AI = True
 ENABLE_CPPCHECK = True
 ENABLE_CLANG = False
+
+RULE_ENGINE_CONFIG = {
+    "enabled_rules": None,
+    "disabled_rules": [],
+    "enabled_chapters": None,
+    "disabled_chapters": [],
+    "enabled_categories": None,
+    "disabled_categories": [],
+    "minimum_priority": None,
+}
 
 
 def ensure_runtime_directories():
