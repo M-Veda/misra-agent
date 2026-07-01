@@ -3,9 +3,15 @@
 import re
 
 from rules.base_rule import BaseRule
-from rules.rule_helpers import strip_string_literals
+from rules.rule_helpers import strip_comments, strip_string_literals
 
 _OCTAL_LITERAL_PATTERN = re.compile(r"(?<![0-9A-Za-z_\\.])0[0-7]+(?![0-9A-Za-z_])")
+_HEX_OR_OCTAL_LITERAL_PATTERN = re.compile(
+    r"(?<![0-9A-Za-z_\\.])(?:0[xX][0-9A-Fa-f]+|0[0-7]+)(?![0-9A-Za-z_\\.])"
+)
+_INTEGER_LITERAL_PATTERN = re.compile(
+    r"(?<![0-9A-Za-z_\\.])(?:0[xX][0-9A-Fa-f]+|0[0-7]+|[0-9]+)([uUlL]+)?(?![0-9A-Za-z_\\.])"
+)
 
 
 class Rule71(BaseRule):
@@ -29,7 +35,7 @@ class Rule71(BaseRule):
             if not line:
                 continue
 
-            cleaned_line = strip_string_literals(line)
+            cleaned_line = strip_string_literals(strip_comments(line))
             for match in _OCTAL_LITERAL_PATTERN.finditer(cleaned_line):
                 literal = match.group(0)
                 violations.append(
@@ -39,6 +45,87 @@ class Rule71(BaseRule):
                         original=line,
                         explanation=(
                             f"Octal constant '{literal}' is not permitted; use a decimal or hexadecimal literal instead."
+                        ),
+                    )
+                )
+                break
+        return violations
+
+
+class Rule72(BaseRule):
+    RULE_ID = "7.2"
+    TITLE = "A u suffix shall be applied to all octal or hexadecimal constants that are represented in an unsigned form"
+    CHAPTER = "7"
+    CATEGORY = "Expressions"
+    SEVERITY = "Required"
+    DESCRIPTION = "Octal and hexadecimal constants should use an unsigned suffix when represented as unsigned values."
+    RATIONALE = "Unsigned suffixes make the intended type of octal and hexadecimal literals explicit and avoid accidental sign-related behavior."
+    FIXABLE = False
+    REFERENCES = ("MISRA C:2012 Rule 7.2",)
+    PRIORITY = 26
+    CAPABILITIES = ("text",)
+    METADATA = {"chapter_title": "Expressions", "analysis": "text"}
+
+    def check(self, code, file_path):
+        violations = []
+        for line_number, raw_line in enumerate(code.splitlines(), start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            cleaned_line = strip_string_literals(strip_comments(line))
+            for match in _HEX_OR_OCTAL_LITERAL_PATTERN.finditer(cleaned_line):
+                literal = match.group(0)
+                if re.search(r"[uU]", literal):
+                    continue
+                violations.append(
+                    self.create_violation(
+                        file_path=file_path,
+                        line=line_number,
+                        original=line,
+                        explanation=(
+                            f"Hexadecimal or octal literal '{literal}' should include an unsigned suffix such as 'u' or 'U'."
+                        ),
+                    )
+                )
+                break
+        return violations
+
+
+class Rule73(BaseRule):
+    RULE_ID = "7.3"
+    TITLE = "The lowercase character l shall not be used in a literal suffix"
+    CHAPTER = "7"
+    CATEGORY = "Expressions"
+    SEVERITY = "Required"
+    DESCRIPTION = "Literal suffixes should use uppercase 'L' rather than lowercase 'l'."
+    RATIONALE = "Lowercase suffix letters are easy to confuse with the digit '1' and reduce readability."
+    FIXABLE = False
+    REFERENCES = ("MISRA C:2012 Rule 7.3",)
+    PRIORITY = 27
+    CAPABILITIES = ("text",)
+    METADATA = {"chapter_title": "Expressions", "analysis": "text"}
+
+    def check(self, code, file_path):
+        violations = []
+        for line_number, raw_line in enumerate(code.splitlines(), start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            cleaned_line = strip_string_literals(strip_comments(line))
+            for match in _INTEGER_LITERAL_PATTERN.finditer(cleaned_line):
+                literal = match.group(0)
+                suffix = match.group(1) or ""
+                if not suffix or "l" not in suffix:
+                    continue
+                violations.append(
+                    self.create_violation(
+                        file_path=file_path,
+                        line=line_number,
+                        original=line,
+                        explanation=(
+                            f"Literal suffix '{suffix}' uses lowercase 'l'; use uppercase 'L' instead."
                         ),
                     )
                 )

@@ -21,10 +21,10 @@ class RuleEngineModule2Test(unittest.TestCase):
         engine = RuleEngine()
 
         self.assertGreaterEqual(engine.registered_rules(), 1)
-        self.assertEqual(engine.enabled_rules(), 15)
+        self.assertEqual(engine.enabled_rules(), 17)
 
         rules = engine.get_rules()
-        self.assertEqual([rule.rule_id for rule in rules], ["7.1", "8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3", "8.14"])
+        self.assertEqual([rule.rule_id for rule in rules], ["7.1", "7.2", "7.3", "8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3", "8.14"])
         rule = rules[0]
         self.assertEqual(rule.chapter, "7")
         self.assertEqual(rule.category, "Expressions")
@@ -181,6 +181,46 @@ class RuleEngineModule2Test(unittest.TestCase):
 
         self.assertEqual(violations, [])
 
+    def test_rule_72_reports_unsigned_octal_and_hex_literals_without_suffix(self):
+        code = "int value = 0x7f;\nint other = 0123;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.2"])
+
+        self.assertEqual(len(violations), 2)
+        self.assertTrue(all(violation.rule_id == "7.2" for violation in violations))
+        self.assertTrue(all("unsigned" in violation.explanation.lower() for violation in violations))
+
+    def test_rule_72_ignores_unsigned_octal_and_hex_literals_with_suffix(self):
+        code = "int value = 0x7fu;\nint other = 0123u;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.2"])
+
+        self.assertEqual(violations, [])
+
+    def test_rule_72_ignores_decimal_literals(self):
+        code = "int value = 127;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.2"])
+
+        self.assertEqual(violations, [])
+
+    def test_rule_73_reports_lowercase_long_suffixes(self):
+        code = "long value = 123l;\nunsigned long other = 0x1full;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.3"])
+
+        self.assertEqual(len(violations), 2)
+        self.assertTrue(all(violation.rule_id == "7.3" for violation in violations))
+        self.assertTrue(all("lowercase" in violation.explanation.lower() for violation in violations))
+
+    def test_rule_73_ignores_uppercase_long_suffixes(self):
+        code = "long value = 123L;\nunsigned long other = 0x1fUL;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.3"])
+
+        self.assertEqual(violations, [])
+
+    def test_rule_73_ignores_non_literal_suffixes(self):
+        code = 'const char *text = "123l";\n'
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.3"])
+
+        self.assertEqual(violations, [])
+
     def test_rule_814_reports_register_storage_class_specifier(self):
         code = "register int value = 1;\n"
         violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.14"])
@@ -199,11 +239,11 @@ class RuleEngineModule2Test(unittest.TestCase):
     def test_filters_disabled_rule(self):
         engine = RuleEngine(config={"disabled_rules": ["8.1"]})
 
-        self.assertEqual(engine.enabled_rules(), 14)
+        self.assertEqual(engine.enabled_rules(), 16)
         self.assertEqual(engine.execute("static int x = 1;\n", "unit.c"), [])
         self.assertEqual(
             [rule.rule_id for rule in engine.get_rules(include_disabled=True)],
-            ["7.1", "8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3", "8.14"],
+            ["7.1", "7.2", "7.3", "8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3", "8.14"],
         )
 
     def test_filters_by_enabled_rule_and_chapter(self):
