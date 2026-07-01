@@ -21,24 +21,24 @@ class RuleEngineModule2Test(unittest.TestCase):
         engine = RuleEngine()
 
         self.assertGreaterEqual(engine.registered_rules(), 1)
-        self.assertEqual(engine.enabled_rules(), 13)
+        self.assertEqual(engine.enabled_rules(), 15)
 
         rules = engine.get_rules()
-        self.assertEqual([rule.rule_id for rule in rules], ["8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3"])
+        self.assertEqual([rule.rule_id for rule in rules], ["7.1", "8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3", "8.14"])
         rule = rules[0]
-        self.assertEqual(rule.chapter, "8")
-        self.assertEqual(rule.category, "Declarations and definitions")
+        self.assertEqual(rule.chapter, "7")
+        self.assertEqual(rule.category, "Expressions")
         self.assertEqual(rule.severity, "Required")
-        self.assertTrue(rule.fixable)
-        self.assertEqual(rule.priority, 30)
-        self.assertIn("MISRA C:2012 Rule 8.1", rule.references)
+        self.assertFalse(rule.fixable)
+        self.assertEqual(rule.priority, 25)
+        self.assertIn("MISRA C:2012 Rule 7.1", rule.references)
         self.assertTrue(rule.rationale)
 
     def test_groups_rules_by_chapter(self):
         grouped = RuleEngine().rules_by_chapter()
 
         self.assertIn("8", grouped)
-        self.assertEqual([rule.rule_id for rule in grouped["8"]], ["8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "8.10"])
+        self.assertEqual([rule.rule_id for rule in grouped["8"]], ["8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "8.10", "8.14"])
 
     def test_executes_enabled_rules_and_returns_violations(self):
         code = "int main()\n{\n    return 0;\n}\n"
@@ -160,14 +160,50 @@ class RuleEngineModule2Test(unittest.TestCase):
 
         self.assertEqual(violations, [])
 
+    def test_rule_71_reports_octal_constants(self):
+        code = "int value = 0123;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.1"])
+
+        self.assertEqual(len(violations), 1)
+        violation = violations[0]
+        self.assertEqual(violation.rule_id, "7.1")
+        self.assertIn("octal", violation.explanation.lower())
+
+    def test_rule_71_ignores_decimal_and_hex_literals(self):
+        code = "int decimal = 123;\nint hex = 0x7b;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.1"])
+
+        self.assertEqual(violations, [])
+
+    def test_rule_71_ignores_octal_literals_in_strings(self):
+        code = 'const char *text = "0123";\n'
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.1"])
+
+        self.assertEqual(violations, [])
+
+    def test_rule_814_reports_register_storage_class_specifier(self):
+        code = "register int value = 1;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.14"])
+
+        self.assertEqual(len(violations), 1)
+        violation = violations[0]
+        self.assertEqual(violation.rule_id, "8.14")
+        self.assertIn("register", violation.explanation.lower())
+
+    def test_rule_814_ignores_non_register_declarations(self):
+        code = "int value = 1;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.14"])
+
+        self.assertEqual(violations, [])
+
     def test_filters_disabled_rule(self):
         engine = RuleEngine(config={"disabled_rules": ["8.1"]})
 
-        self.assertEqual(engine.enabled_rules(), 12)
+        self.assertEqual(engine.enabled_rules(), 14)
         self.assertEqual(engine.execute("static int x = 1;\n", "unit.c"), [])
         self.assertEqual(
             [rule.rule_id for rule in engine.get_rules(include_disabled=True)],
-            ["8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3"],
+            ["7.1", "8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3", "8.14"],
         )
 
     def test_filters_by_enabled_rule_and_chapter(self):
@@ -236,8 +272,8 @@ class RuleEngineModule2Test(unittest.TestCase):
         rules = service.get_rules()
         grouped = service.get_rules_by_chapter()
 
-        self.assertEqual(rules[0]["rule_id"], "8.1")
-        self.assertEqual(rules[0]["chapter"], "8")
+        self.assertEqual(rules[0]["rule_id"], "7.1")
+        self.assertEqual(rules[0]["chapter"], "7")
         self.assertIn("8", grouped)
         self.assertEqual(grouped["8"][0]["rule_id"], "8.1")
 

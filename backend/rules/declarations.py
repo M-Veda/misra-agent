@@ -509,6 +509,76 @@ class Rule87(BaseRule):
         return self.check(code, file_path)
 
 
+class Rule814(BaseRule):
+    RULE_ID = "8.14"
+    TITLE = "The register storage class specifier shall not be used"
+    CHAPTER = "8"
+    CATEGORY = "Declarations and definitions"
+    SEVERITY = "Required"
+    DESCRIPTION = "The register storage class specifier shall not be used."
+    RATIONALE = "The register storage class specifier is not portable and may be ignored by the implementation."
+    FIXABLE = False
+    REFERENCES = ("MISRA C:2012 Rule 8.14",)
+    PRIORITY = 40
+    CAPABILITIES = ("text",)
+    METADATA = {"chapter_title": "Declarations and definitions", "analysis": "text"}
+
+    def check(self, code, file_path):
+        violations = []
+        for line_number, raw_line in enumerate(code.splitlines(), start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            cleaned_line = self._strip_strings_and_char_literals(line)
+            if re.search(r"\bregister\b", cleaned_line):
+                violations.append(
+                    self.create_violation(
+                        file_path=file_path,
+                        line=line_number,
+                        original=line,
+                        explanation=(
+                            "The register storage class specifier is not permitted; use a normal declaration instead."
+                        ),
+                    )
+                )
+        return violations
+
+    @staticmethod
+    def _strip_strings_and_char_literals(line):
+        result = []
+        index = 0
+        in_string = None
+        while index < len(line):
+            char = line[index]
+            if in_string is None:
+                if char in {'"', "'"}:
+                    in_string = char
+                    result.append(" ")
+                    index += 1
+                    continue
+                result.append(char)
+                index += 1
+                continue
+
+            if char == "\\" and index + 1 < len(line):
+                result.append(" ")
+                result.append(" ")
+                index += 2
+                continue
+
+            if char == in_string:
+                in_string = None
+                result.append(" ")
+                index += 1
+                continue
+
+            result.append(" ")
+            index += 1
+
+        return "".join(result)
+
+
 class Rule89(BaseRule):
     RULE_ID = "8.9"
     TITLE = "A file-scope object should be declared in block scope if it is only used by one function"
