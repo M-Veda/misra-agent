@@ -21,10 +21,10 @@ class RuleEngineModule2Test(unittest.TestCase):
         engine = RuleEngine()
 
         self.assertGreaterEqual(engine.registered_rules(), 1)
-        self.assertEqual(engine.enabled_rules(), 7)
+        self.assertEqual(engine.enabled_rules(), 9)
 
         rules = engine.get_rules()
-        self.assertEqual([rule.rule_id for rule in rules], ["8.1", "8.2", "8.4", "8.7", "9.1", "9.2", "9.3"])
+        self.assertEqual([rule.rule_id for rule in rules], ["8.1", "8.2", "8.4", "8.6", "8.7", "8.8", "9.1", "9.2", "9.3"])
         rule = rules[0]
         self.assertEqual(rule.chapter, "8")
         self.assertEqual(rule.category, "Declarations and definitions")
@@ -38,7 +38,7 @@ class RuleEngineModule2Test(unittest.TestCase):
         grouped = RuleEngine().rules_by_chapter()
 
         self.assertIn("8", grouped)
-        self.assertEqual([rule.rule_id for rule in grouped["8"]], ["8.1", "8.2", "8.4", "8.7"])
+        self.assertEqual([rule.rule_id for rule in grouped["8"]], ["8.1", "8.2", "8.4", "8.6", "8.7", "8.8"])
 
     def test_executes_enabled_rules_and_returns_violations(self):
         code = "int main()\n{\n    return 0;\n}\n"
@@ -82,14 +82,32 @@ class RuleEngineModule2Test(unittest.TestCase):
         self.assertEqual(violation.rule_id, "8.7")
         self.assertIn("external linkage", violation.explanation.lower())
 
+    def test_rule_86_reports_shadowed_outer_scope_identifiers(self):
+        code = "int value = 1;\nvoid helper(void)\n{\n    int value = 2;\n}\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.6"])
+
+        self.assertEqual(len(violations), 1)
+        violation = violations[0]
+        self.assertEqual(violation.rule_id, "8.6")
+        self.assertIn("shadow", violation.explanation.lower())
+
+    def test_rule_88_reports_internal_linkage_without_static(self):
+        code = "int helper(void)\n{\n    return 0;\n}\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.8"])
+
+        self.assertEqual(len(violations), 1)
+        violation = violations[0]
+        self.assertEqual(violation.rule_id, "8.8")
+        self.assertIn("static", violation.explanation.lower())
+
     def test_filters_disabled_rule(self):
         engine = RuleEngine(config={"disabled_rules": ["8.1"]})
 
-        self.assertEqual(engine.enabled_rules(), 6)
+        self.assertEqual(engine.enabled_rules(), 8)
         self.assertEqual(engine.execute("static int x = 1;\n", "unit.c"), [])
         self.assertEqual(
             [rule.rule_id for rule in engine.get_rules(include_disabled=True)],
-            ["8.1", "8.2", "8.4", "8.7", "9.1", "9.2", "9.3"],
+            ["8.1", "8.2", "8.4", "8.6", "8.7", "8.8", "9.1", "9.2", "9.3"],
         )
 
     def test_filters_by_enabled_rule_and_chapter(self):

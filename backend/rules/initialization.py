@@ -1,10 +1,8 @@
 import re
 
 from rules.base_rule import BaseRule
+from rules.rule_helpers import declaration_match, extract_declarators, extract_symbol, is_function_prototype, strip_comments
 
-_DECLARATION_PATTERN = re.compile(
-    r"(?mx)^[^\S\n]*(?:unsigned\s+|signed\s+|const\s+|volatile\s+|static\s+|extern\s+|register\s+|short\s+|long\s+|int\s+|char\s+|float\s+|double\s+|_Bool\s+|bool\s+|struct\s+|union\s+|enum\s+)(?P<decl>[^;]+);"
-)
 _ASSIGNMENT_PATTERN = re.compile(r"\b([A-Za-z_]\w*)\b\s*=(?!=)")
 _SYMBOL_PATTERN = re.compile(r"\b([A-Za-z_]\w*)\b")
 _IGNORE_SYMBOLS = {
@@ -35,47 +33,6 @@ _IGNORE_SYMBOLS = {
 }
 
 
-def _strip_comments(line):
-    line = re.sub(r"//.*", "", line)
-    line = re.sub(r"/\*.*?\*/", "", line)
-    return line
-
-
-def _is_function_prototype(declaration):
-    return "(" in declaration and ")" in declaration and "=" not in declaration
-
-
-def _extract_declarators(declarator_text):
-    parts = []
-    current = []
-    depth = 0
-    for char in declarator_text:
-        if char == "(" or char == "[":
-            depth += 1
-        elif char == ")" or char == "]":
-            depth = max(depth - 1, 0)
-
-        if char == "," and depth == 0:
-            token = "".join(current).strip()
-            if token:
-                parts.append(token)
-            current = []
-            continue
-        current.append(char)
-
-    token = "".join(current).strip()
-    if token:
-        parts.append(token)
-    return parts
-
-
-def _extract_symbol(declarator):
-    match = _SYMBOL_PATTERN.match(declarator.strip())
-    if match:
-        return match.group(1)
-    return None
-
-
 class Rule91(BaseRule):
     RULE_ID = "9.1"
     TITLE = "Objects shall be initialized before use"
@@ -95,25 +52,25 @@ class Rule91(BaseRule):
         scope_stack = [{}]
 
         for line_number, raw_line in enumerate(code.splitlines(), start=1):
-            line = _strip_comments(raw_line)
+            line = strip_comments(raw_line)
             if "{" in line:
                 scope_stack.append(scope_stack[-1].copy())
             if "}" in line and len(scope_stack) > 1:
                 scope_stack.pop()
 
-            declaration_match = _DECLARATION_PATTERN.match(line)
-            if declaration_match:
-                declaration = declaration_match.group("decl")
-                if _is_function_prototype(declaration):
+            declaration_match_result = declaration_match(line)
+            if declaration_match_result:
+                declaration = declaration_match_result.group("decl")
+                if is_function_prototype(declaration):
                     continue
 
-                for declarator in _extract_declarators(declaration):
+                for declarator in extract_declarators(declaration):
                     if "=" in declarator:
-                        symbol = _extract_symbol(declarator)
+                        symbol = extract_symbol(declarator)
                         if symbol:
                             scope_stack[-1][symbol] = True
                     else:
-                        symbol = _extract_symbol(declarator)
+                        symbol = extract_symbol(declarator)
                         if symbol:
                             scope_stack[-1][symbol] = False
                 continue
@@ -166,25 +123,25 @@ class Rule92(BaseRule):
         scope_stack = [{}]
 
         for line_number, raw_line in enumerate(code.splitlines(), start=1):
-            line = _strip_comments(raw_line)
+            line = strip_comments(raw_line)
             if "{" in line:
                 scope_stack.append(scope_stack[-1].copy())
             if "}" in line and len(scope_stack) > 1:
                 scope_stack.pop()
 
-            declaration_match = _DECLARATION_PATTERN.match(line)
-            if declaration_match:
-                declaration = declaration_match.group("decl")
-                if _is_function_prototype(declaration):
+            declaration_match_result = declaration_match(line)
+            if declaration_match_result:
+                declaration = declaration_match_result.group("decl")
+                if is_function_prototype(declaration):
                     continue
 
-                for declarator in _extract_declarators(declaration):
+                for declarator in extract_declarators(declaration):
                     if "=" in declarator:
-                        symbol = _extract_symbol(declarator)
+                        symbol = extract_symbol(declarator)
                         if symbol:
                             scope_stack[-1][symbol] = True
                     else:
-                        symbol = _extract_symbol(declarator)
+                        symbol = extract_symbol(declarator)
                         if symbol:
                             scope_stack[-1][symbol] = False
                 continue
@@ -237,26 +194,26 @@ class Rule93(BaseRule):
         scope_stack = [{}]
 
         for line_number, raw_line in enumerate(code.splitlines(), start=1):
-            line = _strip_comments(raw_line)
+            line = strip_comments(raw_line)
             if "{" in line:
                 scope_stack.append(scope_stack[-1].copy())
             if "}" in line and len(scope_stack) > 1:
                 scope_stack.pop()
 
-            declaration_match = _DECLARATION_PATTERN.match(line)
-            if declaration_match:
-                declaration = declaration_match.group("decl")
-                if _is_function_prototype(declaration):
+            declaration_match_result = declaration_match(line)
+            if declaration_match_result:
+                declaration = declaration_match_result.group("decl")
+                if is_function_prototype(declaration):
                     continue
 
-                for declarator in _extract_declarators(declaration):
+                for declarator in extract_declarators(declaration):
                     key = declarator.strip()
                     if "=" in key:
-                        symbol = _extract_symbol(key)
+                        symbol = extract_symbol(key)
                         if symbol:
                             scope_stack[-1][symbol] = True
                     else:
-                        symbol = _extract_symbol(key)
+                        symbol = extract_symbol(key)
                         if symbol:
                             scope_stack[-1][symbol] = False
                 continue

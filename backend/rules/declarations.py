@@ -1,6 +1,7 @@
 import re
 
 from rules.base_rule import BaseRule
+from rules.rule_helpers import declaration_snippet, extract_declarators
 
 _TYPE_KEYWORDS = {
     "auto",
@@ -101,13 +102,6 @@ def _is_supported_top_level_declaration(line):
 
     return False
 
-
-def _declaration_snippet(match_text):
-    if not match_text:
-        return ""
-    return match_text.strip().splitlines()[0].strip()
-
-
 class Rule81(BaseRule):
     RULE_ID = "8.1"
     TITLE = "Function shall have prototype"
@@ -131,7 +125,7 @@ class Rule81(BaseRule):
             if parameter_list.strip():
                 continue
 
-            original = _declaration_snippet(match.group(0))
+            original = declaration_snippet(match.group(0))
             line = code.count("\n", 0, match.start()) + 1
             suggestion = re.sub(r"\(\s*\)", "(void)", original, count=1)
 
@@ -181,7 +175,7 @@ class Rule82(BaseRule):
 
             for token in _split_parameters(parameter_list):
                 if not _contains_named_parameter(token):
-                    original = _declaration_snippet(match.group(0))
+                    original = declaration_snippet(match.group(0))
                     line = code.count("\n", 0, match.start()) + 1
                     violations.append(
                         self.create_violation(
@@ -226,7 +220,7 @@ class Rule84(BaseRule):
             parameter_list = match.group(2)
             for token in _split_parameters(parameter_list):
                 if _is_pointer_parameter(token):
-                    original = _declaration_snippet(match.group(0))
+                    original = declaration_snippet(match.group(0))
                     line = code.count("\n", 0, match.start()) + 1
                     violations.append(
                         self.create_violation(
