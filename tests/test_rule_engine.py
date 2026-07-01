@@ -21,10 +21,10 @@ class RuleEngineModule2Test(unittest.TestCase):
         engine = RuleEngine()
 
         self.assertGreaterEqual(engine.registered_rules(), 1)
-        self.assertEqual(engine.enabled_rules(), 17)
+        self.assertEqual(engine.enabled_rules(), 19)
 
         rules = engine.get_rules()
-        self.assertEqual([rule.rule_id for rule in rules], ["7.1", "7.2", "7.3", "8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3", "8.14"])
+        self.assertEqual([rule.rule_id for rule in rules], ["7.1", "7.2", "7.3", "7.4", "7.5", "8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3", "8.14"])
         rule = rules[0]
         self.assertEqual(rule.chapter, "7")
         self.assertEqual(rule.category, "Expressions")
@@ -221,6 +221,46 @@ class RuleEngineModule2Test(unittest.TestCase):
 
         self.assertEqual(violations, [])
 
+    def test_rule_74_reports_string_literal_initialization_of_non_const_objects(self):
+        code = 'char *message = "hello";\n'
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.4"])
+
+        self.assertEqual(len(violations), 1)
+        self.assertEqual(violations[0].rule_id, "7.4")
+        self.assertIn("string literal", violations[0].explanation.lower())
+
+    def test_rule_74_ignores_const_string_literal_initialization(self):
+        code = 'const char *message = "hello";\n'
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.4"])
+
+        self.assertEqual(violations, [])
+
+    def test_rule_74_ignores_non_literal_initialization(self):
+        code = 'char *message = other;\n'
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.4"])
+
+        self.assertEqual(violations, [])
+
+    def test_rule_75_reports_character_literal_initialization_of_non_const_objects(self):
+        code = "char value = 'x';\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.5"])
+
+        self.assertEqual(len(violations), 1)
+        self.assertEqual(violations[0].rule_id, "7.5")
+        self.assertIn("character literal", violations[0].explanation.lower())
+
+    def test_rule_75_ignores_const_character_literal_initialization(self):
+        code = "const char value = 'x';\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.5"])
+
+        self.assertEqual(violations, [])
+
+    def test_rule_75_ignores_non_literal_initialization(self):
+        code = "char value = 88;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.5"])
+
+        self.assertEqual(violations, [])
+
     def test_rule_814_reports_register_storage_class_specifier(self):
         code = "register int value = 1;\n"
         violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.14"])
@@ -239,11 +279,11 @@ class RuleEngineModule2Test(unittest.TestCase):
     def test_filters_disabled_rule(self):
         engine = RuleEngine(config={"disabled_rules": ["8.1"]})
 
-        self.assertEqual(engine.enabled_rules(), 16)
+        self.assertEqual(engine.enabled_rules(), 18)
         self.assertEqual(engine.execute("static int x = 1;\n", "unit.c"), [])
         self.assertEqual(
             [rule.rule_id for rule in engine.get_rules(include_disabled=True)],
-            ["7.1", "7.2", "7.3", "8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3", "8.14"],
+            ["7.1", "7.2", "7.3", "7.4", "7.5", "8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3", "8.14"],
         )
 
     def test_filters_by_enabled_rule_and_chapter(self):

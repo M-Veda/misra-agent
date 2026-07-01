@@ -12,6 +12,8 @@ _HEX_OR_OCTAL_LITERAL_PATTERN = re.compile(
 _INTEGER_LITERAL_PATTERN = re.compile(
     r"(?<![0-9A-Za-z_\\.])(?:0[xX][0-9A-Fa-f]+|0[0-7]+|[0-9]+)([uUlL]+)?(?![0-9A-Za-z_\\.])"
 )
+_STRING_LITERAL_PATTERN = re.compile(r'"(?:\\.|[^"\\])*"')
+_CHARACTER_LITERAL_PATTERN = re.compile(r"'(?:\\.|[^'\\])'")
 
 
 class Rule71(BaseRule):
@@ -130,5 +132,81 @@ class Rule73(BaseRule):
                     )
                 )
                 break
+        return violations
+
+
+class Rule74(BaseRule):
+    RULE_ID = "7.4"
+    TITLE = "A string literal shall not be assigned to an object unless the object is const-qualified"
+    CHAPTER = "7"
+    CATEGORY = "Expressions"
+    SEVERITY = "Required"
+    DESCRIPTION = "String literals should not be assigned to non-const objects."
+    RATIONALE = "Assigning string literals to non-const objects can lead to undefined behavior and violates the intended immutability of string literals."
+    FIXABLE = False
+    REFERENCES = ("MISRA C:2012 Rule 7.4",)
+    PRIORITY = 28
+    CAPABILITIES = ("text",)
+    METADATA = {"chapter_title": "Expressions", "analysis": "text"}
+
+    def check(self, code, file_path):
+        violations = []
+        for line_number, raw_line in enumerate(code.splitlines(), start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            candidate_line = strip_comments(line)
+            if not _STRING_LITERAL_PATTERN.search(candidate_line):
+                continue
+            if re.search(r"\bconst\b", candidate_line):
+                continue
+            if re.search(r"\b(?:char|wchar_t)\b\s*\*", candidate_line) and "=" in candidate_line:
+                violations.append(
+                    self.create_violation(
+                        file_path=file_path,
+                        line=line_number,
+                        original=line,
+                        explanation="A string literal is assigned to a non-const object; make the object const-qualified or use a different initialization approach.",
+                    )
+                )
+        return violations
+
+
+class Rule75(BaseRule):
+    RULE_ID = "7.5"
+    TITLE = "A character literal shall not be assigned to an object unless the object is const-qualified"
+    CHAPTER = "7"
+    CATEGORY = "Expressions"
+    SEVERITY = "Required"
+    DESCRIPTION = "Character literals should not be assigned to non-const objects."
+    RATIONALE = "Assigning character literals to non-const objects can lead to undefined behavior and violates the intended immutability of character literals."
+    FIXABLE = False
+    REFERENCES = ("MISRA C:2012 Rule 7.5",)
+    PRIORITY = 29
+    CAPABILITIES = ("text",)
+    METADATA = {"chapter_title": "Expressions", "analysis": "text"}
+
+    def check(self, code, file_path):
+        violations = []
+        for line_number, raw_line in enumerate(code.splitlines(), start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            candidate_line = strip_comments(line)
+            if not _CHARACTER_LITERAL_PATTERN.search(candidate_line):
+                continue
+            if re.search(r"\bconst\b", candidate_line):
+                continue
+            if re.search(r"\bchar\b", candidate_line) and "=" in candidate_line:
+                violations.append(
+                    self.create_violation(
+                        file_path=file_path,
+                        line=line_number,
+                        original=line,
+                        explanation="A character literal is assigned to a non-const object; make the object const-qualified or use a different initialization approach.",
+                    )
+                )
         return violations
 
