@@ -112,6 +112,69 @@ def _is_supported_top_level_declaration(line):
 
     return False
 
+
+def _extract_file_scope_objects(code):
+    objects = []
+    brace_depth = 0
+
+    for line_number, raw_line in enumerate(code.splitlines(), start=1):
+        line = strip_comments(raw_line)
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", "//", "/*", "*")):
+            continue
+
+        brace_depth += stripped.count("{") - stripped.count("}")
+        if brace_depth != 0:
+            continue
+
+        if stripped.startswith(("typedef", "extern", "static", "inline", "__inline", "__inline__")):
+            continue
+        if "(" in stripped and ")" in stripped and ";" in stripped:
+            continue
+        if not re.search(r"\b(?:int|char|float|double|void|short|long|signed|unsigned|bool|_Bool|struct|union|enum)\b", stripped):
+            continue
+
+        match = re.search(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*(?:=|;)", stripped)
+        if not match:
+            continue
+
+        objects.append({"name": match.group(1), "line": line_number})
+
+    return objects
+
+
+def _extract_function_definitions(code):
+    functions = []
+    pattern = re.compile(r"(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\([^;{]*\)\s*\{", re.MULTILINE)
+
+    for match in pattern.finditer(code):
+        opening_brace = match.end() - 1
+        depth = 0
+        end_index = None
+        for index in range(opening_brace, len(code)):
+            char = code[index]
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    end_index = index
+                    break
+        if end_index is None:
+            continue
+
+        body = code[opening_brace + 1:end_index]
+        functions.append(
+            {
+                "name": match.group("name"),
+                "line": code.count("\n", 0, opening_brace) + 1,
+                "body": body,
+            }
+        )
+
+    return functions
+
+
 class Rule81(BaseRule):
     RULE_ID = "8.1"
     TITLE = "Function shall have prototype"
@@ -444,3 +507,123 @@ class Rule87(BaseRule):
 
     def check_with_context(self, code, file_path, analysis_context=None):
         return self.check(code, file_path)
+
+
+class Rule89(BaseRule):
+    RULE_ID = "8.9"
+    TITLE = "A file-scope object should be declared in block scope if it is only used by one function"
+    CHAPTER = "8"
+    CATEGORY = "Declarations and definitions"
+    SEVERITY = "Required"
+    DESCRIPTION = "A file-scope object that is only used by one function should be reviewed for placement in block scope."
+    RATIONALE = "Restricting an object to the narrowest scope reduces coupling and makes ownership clearer."
+    FIXABLE = False
+    REFERENCES = ("MISRA C:2012 Rule 8.9",)
+    PRIORITY = 34
+    CAPABILITIES = ("hybrid",)
+    METADATA = {"chapter_title": "Declarations and definitions", "analysis": "hybrid"}
+
+    def check(self, code, file_path):
+        return self._check(code, file_path, analysis_context=None)
+
+    def check_with_context(self, code, file_path, analysis_context=None):
+        return self._check(code, file_path, analysis_context=analysis_context)
+
+    def _check(self, code, file_path, analysis_context=None):
+        violations = []
+        objects = _extract_file_scope_objects(code)
+        functions = _extract_function_definitions(code)
+        if not objects or not functions:
+            return violations
+
+        for declaration in objects:
+            name = declaration["name"]
+            users = []
+            for function in functions:
+                if re.search(rf"\b{re.escape(name)}\b", function["body"]):
+                    users.append(function["name"])
+
+            if len(set(users)) != 1:
+                continue
+
+            violations.append(
+                self.create_violation(
+                    file_path=file_path,
+                    line=declaration["line"],
+                    original=declaration["name"],
+                    suggestion="Consider moving this object to block scope if it is only required by one function.",
+                    explanation=(
+                        f"Object '{name}' appears to be used by only one function. "
+                        "Review whether it should be moved to block scope to reduce file-scope coupling."
+                    ),
+                    metadata={
+                        "symbol": name,
+                        "used_by": users[0],
+                        "analysis_available": bool(analysis_context and getattr(analysis_context, "available", False)),
+                    },
+                )
+            )
+
+        return violations
+
+
+class Rule810(BaseRule):
+    RULE_ID = "8.10"
+    TITLE = "A file-scope function should be reviewed if it is only used by one function"
+    CHAPTER = "8"
+    CATEGORY = "Declarations and definitions"
+    SEVERITY = "Required"
+    DESCRIPTION = "A file-scope function that is only used by one function should be reviewed for scope reduction."
+    RATIONALE = "Reducing a function's exposure to the rest of the translation unit improves encapsulation and maintainability."
+    FIXABLE = False
+    REFERENCES = ("MISRA C:2012 Rule 8.10",)
+    PRIORITY = 35
+    CAPABILITIES = ("hybrid",)
+    METADATA = {"chapter_title": "Declarations and definitions", "analysis": "hybrid"}
+
+    def check(self, code, file_path):
+        return self._check(code, file_path, analysis_context=None)
+
+    def check_with_context(self, code, file_path, analysis_context=None):
+        return self._check(code, file_path, analysis_context=analysis_context)
+
+    def _check(self, code, file_path, analysis_context=None):
+        violations = []
+        functions = _extract_function_definitions(code)
+        if not functions:
+            return violations
+
+        for function in functions:
+            name = function["name"]
+            if name in {"main"}:
+                continue
+
+            callers = []
+            for candidate in functions:
+                if candidate["name"] == name:
+                    continue
+                if re.search(rf"\b{re.escape(name)}\b", candidate["body"]):
+                    callers.append(candidate["name"])
+
+            if len(set(callers)) != 1:
+                continue
+
+            violations.append(
+                self.create_violation(
+                    file_path=file_path,
+                    line=function["line"],
+                    original=name,
+                    suggestion="Consider whether this function should be restricted to the single caller that uses it.",
+                    explanation=(
+                        f"Function '{name}' appears to be used by only one function. "
+                        "Review whether it should be restricted to block scope or otherwise reduced in visibility."
+                    ),
+                    metadata={
+                        "symbol": name,
+                        "called_by": callers[0],
+                        "analysis_available": bool(analysis_context and getattr(analysis_context, "available", False)),
+                    },
+                )
+            )
+
+        return violations

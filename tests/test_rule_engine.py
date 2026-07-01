@@ -21,10 +21,10 @@ class RuleEngineModule2Test(unittest.TestCase):
         engine = RuleEngine()
 
         self.assertGreaterEqual(engine.registered_rules(), 1)
-        self.assertEqual(engine.enabled_rules(), 11)
+        self.assertEqual(engine.enabled_rules(), 13)
 
         rules = engine.get_rules()
-        self.assertEqual([rule.rule_id for rule in rules], ["8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "9.1", "9.2", "9.3"])
+        self.assertEqual([rule.rule_id for rule in rules], ["8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3"])
         rule = rules[0]
         self.assertEqual(rule.chapter, "8")
         self.assertEqual(rule.category, "Declarations and definitions")
@@ -38,7 +38,7 @@ class RuleEngineModule2Test(unittest.TestCase):
         grouped = RuleEngine().rules_by_chapter()
 
         self.assertIn("8", grouped)
-        self.assertEqual([rule.rule_id for rule in grouped["8"]], ["8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8"])
+        self.assertEqual([rule.rule_id for rule in grouped["8"]], ["8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "8.10"])
 
     def test_executes_enabled_rules_and_returns_violations(self):
         code = "int main()\n{\n    return 0;\n}\n"
@@ -130,14 +130,44 @@ class RuleEngineModule2Test(unittest.TestCase):
         self.assertEqual(violation.rule_id, "8.8")
         self.assertIn("static", violation.explanation.lower())
 
+    def test_rule_89_reports_file_scope_object_only_used_by_one_function(self):
+        code = "int shared_value;\n\nint helper(void)\n{\n    return shared_value;\n}\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.9"])
+
+        self.assertEqual(len(violations), 1)
+        violation = violations[0]
+        self.assertEqual(violation.rule_id, "8.9")
+        self.assertIn("block scope", violation.explanation.lower())
+
+    def test_rule_89_skips_objects_with_multiple_function_users(self):
+        code = "int shared_value;\n\nint helper(void)\n{\n    return shared_value;\n}\n\nint other(void)\n{\n    return shared_value + 1;\n}\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.9"])
+
+        self.assertEqual(violations, [])
+
+    def test_rule_810_reports_file_scope_function_only_called_by_one_function(self):
+        code = "int helper(void);\n\nint helper(void)\n{\n    return 1;\n}\n\nint main(void)\n{\n    return helper();\n}\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.10"])
+
+        self.assertEqual(len(violations), 1)
+        violation = violations[0]
+        self.assertEqual(violation.rule_id, "8.10")
+        self.assertIn("block scope", violation.explanation.lower())
+
+    def test_rule_810_skips_functions_used_by_multiple_functions(self):
+        code = "int helper(void);\n\nint helper(void)\n{\n    return 1;\n}\n\nint main(void)\n{\n    return helper();\n}\n\nint other(void)\n{\n    return helper();\n}\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.10"])
+
+        self.assertEqual(violations, [])
+
     def test_filters_disabled_rule(self):
         engine = RuleEngine(config={"disabled_rules": ["8.1"]})
 
-        self.assertEqual(engine.enabled_rules(), 10)
+        self.assertEqual(engine.enabled_rules(), 12)
         self.assertEqual(engine.execute("static int x = 1;\n", "unit.c"), [])
         self.assertEqual(
             [rule.rule_id for rule in engine.get_rules(include_disabled=True)],
-            ["8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "9.1", "9.2", "9.3"],
+            ["8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3"],
         )
 
     def test_filters_by_enabled_rule_and_chapter(self):
