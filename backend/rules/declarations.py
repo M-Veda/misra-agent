@@ -11,6 +11,7 @@ from rules.rule_helpers import (
     is_function_prototype,
     normalize_declaration_signature,
     strip_comments,
+    strip_string_literals,
 )
 
 _TYPE_KEYWORDS = {
@@ -530,7 +531,7 @@ class Rule814(BaseRule):
             if not line:
                 continue
 
-            cleaned_line = self._strip_strings_and_char_literals(line)
+            cleaned_line = strip_string_literals(line)
             if re.search(r"\bregister\b", cleaned_line):
                 violations.append(
                     self.create_violation(
@@ -543,40 +544,6 @@ class Rule814(BaseRule):
                     )
                 )
         return violations
-
-    @staticmethod
-    def _strip_strings_and_char_literals(line):
-        result = []
-        index = 0
-        in_string = None
-        while index < len(line):
-            char = line[index]
-            if in_string is None:
-                if char in {'"', "'"}:
-                    in_string = char
-                    result.append(" ")
-                    index += 1
-                    continue
-                result.append(char)
-                index += 1
-                continue
-
-            if char == "\\" and index + 1 < len(line):
-                result.append(" ")
-                result.append(" ")
-                index += 2
-                continue
-
-            if char == in_string:
-                in_string = None
-                result.append(" ")
-                index += 1
-                continue
-
-            result.append(" ")
-            index += 1
-
-        return "".join(result)
 
 
 class Rule89(BaseRule):

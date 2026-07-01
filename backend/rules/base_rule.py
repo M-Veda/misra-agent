@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from functools import lru_cache
 
 from models.rule import Rule
 
@@ -22,6 +23,7 @@ class BaseRule(ABC):
     METADATA = {}
 
     @classmethod
+    @lru_cache(maxsize=None)
     def metadata(cls):
         cls.validate_metadata()
         return Rule(

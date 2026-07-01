@@ -1,6 +1,7 @@
 import re
 
 from rules.base_rule import BaseRule
+from rules.rule_helpers import strip_comments
 
 
 class Rule86(BaseRule):
@@ -22,8 +23,7 @@ class Rule86(BaseRule):
         scope_stack = [{}]
 
         for line_number, raw_line in enumerate(code.splitlines(), start=1):
-            line = re.sub(r"//.*", "", raw_line)
-            line = re.sub(r"/\*.*?\*/", "", line)
+            line = strip_comments(raw_line)
 
             if "{" in line:
                 scope_stack.append(scope_stack[-1].copy())
@@ -79,8 +79,7 @@ class Rule88(BaseRule):
         brace_depth = 0
 
         for line_number, raw_line in enumerate(code.splitlines(), start=1):
-            line = re.sub(r"//.*", "", raw_line)
-            line = re.sub(r"/\*.*?\*/", "", line)
+            line = strip_comments(raw_line)
             stripped = line.strip()
             if not stripped:
                 continue

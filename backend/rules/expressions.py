@@ -3,6 +3,9 @@
 import re
 
 from rules.base_rule import BaseRule
+from rules.rule_helpers import strip_string_literals
+
+_OCTAL_LITERAL_PATTERN = re.compile(r"(?<![0-9A-Za-z_\\.])0[0-7]+(?![0-9A-Za-z_])")
 
 
 class Rule71(BaseRule):
@@ -26,8 +29,8 @@ class Rule71(BaseRule):
             if not line:
                 continue
 
-            cleaned_line = self._strip_strings_and_char_literals(line)
-            for match in re.finditer(r"(?<![0-9A-Za-z_\\.])0[0-7]+(?![0-9A-Za-z_])", cleaned_line):
+            cleaned_line = strip_string_literals(line)
+            for match in _OCTAL_LITERAL_PATTERN.finditer(cleaned_line):
                 literal = match.group(0)
                 violations.append(
                     self.create_violation(
@@ -42,36 +45,3 @@ class Rule71(BaseRule):
                 break
         return violations
 
-    @staticmethod
-    def _strip_strings_and_char_literals(line):
-        result = []
-        index = 0
-        in_string = None
-        while index < len(line):
-            char = line[index]
-            if in_string is None:
-                if char in {'"', "'"}:
-                    in_string = char
-                    result.append(" ")
-                    index += 1
-                    continue
-                result.append(char)
-                index += 1
-                continue
-
-            if char == "\\" and index + 1 < len(line):
-                result.append(" ")
-                result.append(" ")
-                index += 2
-                continue
-
-            if char == in_string:
-                in_string = None
-                result.append(" ")
-                index += 1
-                continue
-
-            result.append(" ")
-            index += 1
-
-        return "".join(result)

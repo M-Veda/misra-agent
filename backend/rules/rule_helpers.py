@@ -8,6 +8,8 @@ _FULL_DECLARATION_PATTERN = re.compile(
     r"(?mx)^[^\S\n]*(?P<decl>[^;]+);"
 )
 _SYMBOL_PATTERN = re.compile(r"\b([A-Za-z_]\w*)\b")
+_COMMENT_LINE_PATTERN = re.compile(r"//.*")
+_BLOCK_COMMENT_PATTERN = re.compile(r"/\*.*?\*/")
 _TYPE_KEYWORDS = {
     "auto",
     "const",
@@ -40,9 +42,43 @@ _TYPE_KEYWORDS = {
 
 
 def strip_comments(line):
-    line = re.sub(r"//.*", "", line)
-    line = re.sub(r"/\*.*?\*/", "", line)
+    line = _COMMENT_LINE_PATTERN.sub("", line)
+    line = _BLOCK_COMMENT_PATTERN.sub("", line)
     return line
+
+
+def strip_string_literals(text):
+    result = []
+    index = 0
+    in_string = None
+    while index < len(text):
+        char = text[index]
+        if in_string is None:
+            if char in {'"', "'"}:
+                in_string = char
+                result.append(" ")
+                index += 1
+                continue
+            result.append(char)
+            index += 1
+            continue
+
+        if char == "\\" and index + 1 < len(text):
+            result.append(" ")
+            result.append(" ")
+            index += 2
+            continue
+
+        if char == in_string:
+            in_string = None
+            result.append(" ")
+            index += 1
+            continue
+
+        result.append(" ")
+        index += 1
+
+    return "".join(result)
 
 
 def is_function_prototype(declaration):
