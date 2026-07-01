@@ -21,10 +21,10 @@ class RuleEngineModule2Test(unittest.TestCase):
         engine = RuleEngine()
 
         self.assertGreaterEqual(engine.registered_rules(), 1)
-        self.assertEqual(engine.enabled_rules(), 9)
+        self.assertEqual(engine.enabled_rules(), 11)
 
         rules = engine.get_rules()
-        self.assertEqual([rule.rule_id for rule in rules], ["8.1", "8.2", "8.4", "8.6", "8.7", "8.8", "9.1", "9.2", "9.3"])
+        self.assertEqual([rule.rule_id for rule in rules], ["8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "9.1", "9.2", "9.3"])
         rule = rules[0]
         self.assertEqual(rule.chapter, "8")
         self.assertEqual(rule.category, "Declarations and definitions")
@@ -38,7 +38,7 @@ class RuleEngineModule2Test(unittest.TestCase):
         grouped = RuleEngine().rules_by_chapter()
 
         self.assertIn("8", grouped)
-        self.assertEqual([rule.rule_id for rule in grouped["8"]], ["8.1", "8.2", "8.4", "8.6", "8.7", "8.8"])
+        self.assertEqual([rule.rule_id for rule in grouped["8"]], ["8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8"])
 
     def test_executes_enabled_rules_and_returns_violations(self):
         code = "int main()\n{\n    return 0;\n}\n"
@@ -64,6 +64,21 @@ class RuleEngineModule2Test(unittest.TestCase):
         self.assertEqual(violation.rule_id, "8.2")
         self.assertIn("parameter names", violation.explanation.lower())
 
+    def test_rule_83_reports_inconsistent_declarations(self):
+        code = "int value;\nconst int value;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.3"])
+
+        self.assertEqual(len(violations), 1)
+        violation = violations[0]
+        self.assertEqual(violation.rule_id, "8.3")
+        self.assertIn("type", violation.explanation.lower())
+
+    def test_rule_83_ignores_consistent_declarations(self):
+        code = "int value;\nextern int value;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.3"])
+
+        self.assertEqual(violations, [])
+
     def test_rule_84_reports_pointer_array_parameters(self):
         code = "void process(int *data);\n"
         violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.4"])
@@ -72,6 +87,21 @@ class RuleEngineModule2Test(unittest.TestCase):
         violation = violations[0]
         self.assertEqual(violation.rule_id, "8.4")
         self.assertIn("array notation", violation.explanation.lower())
+
+    def test_rule_85_reports_repeated_external_declarations(self):
+        code = "int shared_value;\nint shared_value;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.5"])
+
+        self.assertEqual(len(violations), 1)
+        violation = violations[0]
+        self.assertEqual(violation.rule_id, "8.5")
+        self.assertIn("one and only one", violation.explanation.lower())
+
+    def test_rule_85_ignores_static_internal_declarations(self):
+        code = "static int shared_value;\nstatic int shared_value;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.5"])
+
+        self.assertEqual(violations, [])
 
     def test_rule_87_reports_external_linkage(self):
         code = "int global_value;\n"
@@ -103,11 +133,11 @@ class RuleEngineModule2Test(unittest.TestCase):
     def test_filters_disabled_rule(self):
         engine = RuleEngine(config={"disabled_rules": ["8.1"]})
 
-        self.assertEqual(engine.enabled_rules(), 8)
+        self.assertEqual(engine.enabled_rules(), 10)
         self.assertEqual(engine.execute("static int x = 1;\n", "unit.c"), [])
         self.assertEqual(
             [rule.rule_id for rule in engine.get_rules(include_disabled=True)],
-            ["8.1", "8.2", "8.4", "8.6", "8.7", "8.8", "9.1", "9.2", "9.3"],
+            ["8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "9.1", "9.2", "9.3"],
         )
 
     def test_filters_by_enabled_rule_and_chapter(self):
@@ -116,6 +146,14 @@ class RuleEngineModule2Test(unittest.TestCase):
 
         self.assertEqual(enabled.enabled_rules(), 1)
         self.assertEqual(disabled_by_chapter.enabled_rules(), 3)
+
+    def test_rule_83_and_rule_85_execute_with_context(self):
+        code = "int value;\nconst int value;\nint shared_value;\nint shared_value;\n"
+        context = AnalysisContext(file_path="unit.c", source_code=code, available=True)
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.3", "8.5"], analysis_context=context)
+
+        self.assertEqual(len(violations), 3)
+        self.assertTrue(all(violation.metadata.get("analysis_available") for violation in violations))
 
     def test_registry_rejects_duplicate_rule_ids(self):
         class RuleA(BaseRule):

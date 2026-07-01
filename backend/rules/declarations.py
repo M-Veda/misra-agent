@@ -1,7 +1,17 @@
 import re
 
 from rules.base_rule import BaseRule
-from rules.rule_helpers import declaration_snippet, extract_declarators
+from rules.rule_helpers import (
+    declaration_has_storage_class,
+    declaration_match,
+    declaration_snippet,
+    extract_declarators,
+    extract_symbol,
+    full_declaration_match,
+    is_function_prototype,
+    normalize_declaration_signature,
+    strip_comments,
+)
 
 _TYPE_KEYWORDS = {
     "auto",
@@ -197,6 +207,147 @@ class Rule82(BaseRule):
 
     def check_with_context(self, code, file_path, analysis_context=None):
         return self.check(code, file_path)
+
+
+class Rule83(BaseRule):
+    RULE_ID = "8.3"
+    TITLE = "All declarations of an object or function shall use the same type and type qualifiers"
+    CHAPTER = "8"
+    CATEGORY = "Declarations and definitions"
+    SEVERITY = "Required"
+    DESCRIPTION = "All declarations of an object or function shall use the same type and type qualifiers."
+    RATIONALE = "Consistent declarations make interfaces easier to understand and reduce the risk of accidental type mismatches."
+    FIXABLE = False
+    REFERENCES = ("MISRA C:2012 Rule 8.3",)
+    PRIORITY = 32
+    CAPABILITIES = ("hybrid",)
+    METADATA = {"chapter_title": "Declarations and definitions", "analysis": "hybrid"}
+
+    def check(self, code, file_path):
+        violations = []
+        seen_symbols = {}
+
+        for line_number, raw_line in enumerate(code.splitlines(), start=1):
+            line = strip_comments(raw_line)
+            match_result = full_declaration_match(line)
+            if not match_result:
+                continue
+
+            declaration = match_result.group("decl")
+            if is_function_prototype(declaration) or declaration_has_storage_class(declaration, "typedef"):
+                continue
+
+            signature = normalize_declaration_signature(declaration)
+            if not signature:
+                continue
+
+            for declarator in extract_declarators(declaration):
+                symbol = extract_symbol(declarator)
+                if not symbol:
+                    continue
+
+                previous = seen_symbols.get(symbol)
+                if previous is None:
+                    seen_symbols[symbol] = {"signature": signature, "line": line_number}
+                    continue
+
+                if previous["signature"] != signature:
+                    violations.append(
+                        self.create_violation(
+                            file_path=file_path,
+                            line=line_number,
+                            original=raw_line.strip(),
+                            suggestion=(
+                                "Review these declarations and ensure the same type and qualifiers are used for this identifier."
+                            ),
+                            explanation=(
+                                f"Identifier '{symbol}' is declared with inconsistent type information. "
+                                "All declarations of an object or function should use the same type and type qualifiers."
+                            ),
+                            metadata={
+                                "symbol": symbol,
+                                "previous_signature": previous["signature"],
+                                "current_signature": signature,
+                            },
+                        )
+                    )
+                    break
+
+        return violations
+
+    def check_with_context(self, code, file_path, analysis_context=None):
+        violations = self.check(code, file_path)
+        if analysis_context and getattr(analysis_context, "available", False):
+            for violation in violations:
+                violation.metadata["analysis_available"] = True
+        return violations
+
+
+class Rule85(BaseRule):
+    RULE_ID = "8.5"
+    TITLE = "There shall be no more than one declaration of an identifier in a translation unit"
+    CHAPTER = "8"
+    CATEGORY = "Declarations and definitions"
+    SEVERITY = "Required"
+    DESCRIPTION = "There shall be no more than one declaration of an identifier in a translation unit."
+    RATIONALE = "Repeated declarations make dependencies harder to reason about and can hide accidental linkage mistakes."
+    FIXABLE = False
+    REFERENCES = ("MISRA C:2012 Rule 8.5",)
+    PRIORITY = 32
+    CAPABILITIES = ("hybrid",)
+    METADATA = {"chapter_title": "Declarations and definitions", "analysis": "hybrid"}
+
+    def check(self, code, file_path):
+        violations = []
+        seen_symbols = {}
+
+        for line_number, raw_line in enumerate(code.splitlines(), start=1):
+            line = strip_comments(raw_line)
+            match_result = full_declaration_match(line)
+            if not match_result:
+                continue
+
+            declaration = match_result.group("decl")
+            if is_function_prototype(declaration) or declaration_has_storage_class(declaration, "typedef"):
+                continue
+            if declaration_has_storage_class(declaration, "static"):
+                continue
+
+            for declarator in extract_declarators(declaration):
+                symbol = extract_symbol(declarator)
+                if not symbol:
+                    continue
+
+                previous = seen_symbols.get(symbol)
+                if previous is None:
+                    seen_symbols[symbol] = line_number
+                    continue
+
+                violations.append(
+                    self.create_violation(
+                        file_path=file_path,
+                        line=line_number,
+                        original=raw_line.strip(),
+                        suggestion=(
+                            "Review this declaration and ensure the identifier is not declared more than once."
+                        ),
+                        explanation=(
+                            f"Identifier '{symbol}' is declared more than once in the translation unit. "
+                            "There should be one and only one declaration for an identifier with external linkage."
+                        ),
+                        metadata={"symbol": symbol, "previous_line": previous},
+                    )
+                )
+                break
+
+        return violations
+
+    def check_with_context(self, code, file_path, analysis_context=None):
+        violations = self.check(code, file_path)
+        if analysis_context and getattr(analysis_context, "available", False):
+            for violation in violations:
+                violation.metadata["analysis_available"] = True
+        return violations
 
 
 class Rule84(BaseRule):
