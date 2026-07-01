@@ -21,10 +21,10 @@ class RuleEngineModule2Test(unittest.TestCase):
         engine = RuleEngine()
 
         self.assertGreaterEqual(engine.registered_rules(), 1)
-        self.assertEqual(engine.enabled_rules(), 1)
+        self.assertEqual(engine.enabled_rules(), 7)
 
         rules = engine.get_rules()
-        self.assertEqual([rule.rule_id for rule in rules], ["8.1"])
+        self.assertEqual([rule.rule_id for rule in rules], ["8.1", "8.2", "8.4", "8.7", "9.1", "9.2", "9.3"])
         rule = rules[0]
         self.assertEqual(rule.chapter, "8")
         self.assertEqual(rule.category, "Declarations and definitions")
@@ -38,16 +38,16 @@ class RuleEngineModule2Test(unittest.TestCase):
         grouped = RuleEngine().rules_by_chapter()
 
         self.assertIn("8", grouped)
-        self.assertEqual([rule.rule_id for rule in grouped["8"]], ["8.1"])
+        self.assertEqual([rule.rule_id for rule in grouped["8"]], ["8.1", "8.2", "8.4", "8.7"])
 
     def test_executes_enabled_rules_and_returns_violations(self):
         code = "int main()\n{\n    return 0;\n}\n"
         violations = RuleEngine().execute(code=code, file_path="unit.c")
 
-        self.assertEqual(len(violations), 1)
-        violation = violations[0]
+        self.assertEqual(len(violations), 2)
+        self.assertEqual({violation.rule_id for violation in violations}, {"8.1", "8.7"})
+        violation = next(v for v in violations if v.rule_id == "8.1")
         self.assertIsInstance(violation, Violation)
-        self.assertEqual(violation.rule_id, "8.1")
         self.assertEqual(violation.original_code, "int main()")
         self.assertEqual(violation.suggested_code, "int main(void)")
         self.assertTrue(violation.auto_fixable)
@@ -55,19 +55,49 @@ class RuleEngineModule2Test(unittest.TestCase):
         self.assertEqual(violation.metadata["chapter"], "8")
         self.assertEqual(violation.metadata["priority"], 30)
 
+    def test_rule_82_reports_missing_parameter_names(self):
+        code = "int sum(int, int);\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.2"])
+
+        self.assertEqual(len(violations), 1)
+        violation = violations[0]
+        self.assertEqual(violation.rule_id, "8.2")
+        self.assertIn("parameter names", violation.explanation.lower())
+
+    def test_rule_84_reports_pointer_array_parameters(self):
+        code = "void process(int *data);\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.4"])
+
+        self.assertEqual(len(violations), 1)
+        violation = violations[0]
+        self.assertEqual(violation.rule_id, "8.4")
+        self.assertIn("array notation", violation.explanation.lower())
+
+    def test_rule_87_reports_external_linkage(self):
+        code = "int global_value;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.7"])
+
+        self.assertEqual(len(violations), 1)
+        violation = violations[0]
+        self.assertEqual(violation.rule_id, "8.7")
+        self.assertIn("external linkage", violation.explanation.lower())
+
     def test_filters_disabled_rule(self):
         engine = RuleEngine(config={"disabled_rules": ["8.1"]})
 
-        self.assertEqual(engine.enabled_rules(), 0)
-        self.assertEqual(engine.execute("int main()\n", "unit.c"), [])
-        self.assertEqual([rule.rule_id for rule in engine.get_rules(include_disabled=True)], ["8.1"])
+        self.assertEqual(engine.enabled_rules(), 6)
+        self.assertEqual(engine.execute("static int x = 1;\n", "unit.c"), [])
+        self.assertEqual(
+            [rule.rule_id for rule in engine.get_rules(include_disabled=True)],
+            ["8.1", "8.2", "8.4", "8.7", "9.1", "9.2", "9.3"],
+        )
 
     def test_filters_by_enabled_rule_and_chapter(self):
         enabled = RuleEngine(config={"enabled_rules": ["8.1"], "enabled_chapters": ["8"]})
         disabled_by_chapter = RuleEngine(config={"enabled_chapters": ["9"]})
 
         self.assertEqual(enabled.enabled_rules(), 1)
-        self.assertEqual(disabled_by_chapter.enabled_rules(), 0)
+        self.assertEqual(disabled_by_chapter.enabled_rules(), 3)
 
     def test_registry_rejects_duplicate_rule_ids(self):
         class RuleA(BaseRule):
