@@ -21,10 +21,10 @@ class RuleEngineModule2Test(unittest.TestCase):
         engine = RuleEngine()
 
         self.assertGreaterEqual(engine.registered_rules(), 1)
-        self.assertEqual(engine.enabled_rules(), 19)
+        self.assertEqual(engine.enabled_rules(), 21)
 
         rules = engine.get_rules()
-        self.assertEqual([rule.rule_id for rule in rules], ["7.1", "7.2", "7.3", "7.4", "7.5", "8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3", "8.14"])
+        self.assertEqual([rule.rule_id for rule in rules], ["7.1", "7.2", "7.3", "7.4", "7.5", "7.6", "8.1", "7.7", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3", "8.14"])
         rule = rules[0]
         self.assertEqual(rule.chapter, "7")
         self.assertEqual(rule.category, "Expressions")
@@ -261,6 +261,52 @@ class RuleEngineModule2Test(unittest.TestCase):
 
         self.assertEqual(violations, [])
 
+    def test_rule_76_reports_multi_character_literals(self):
+        code = "int value = 'ab';\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.6"])
+
+        self.assertEqual(len(violations), 1)
+        self.assertEqual(violations[0].rule_id, "7.6")
+        self.assertIn("multi-character", violations[0].explanation.lower())
+
+    def test_rule_76_ignores_single_character_literals(self):
+        code = "int value = 'a';\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.6"])
+
+        self.assertEqual(violations, [])
+
+    def test_rule_76_ignores_escaped_character_literals(self):
+        code = "int value = '\\n';\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.6"])
+
+        self.assertEqual(violations, [])
+
+    def test_rule_77_reports_wide_character_literals(self):
+        code = "wchar_t value = L'x';\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.7"])
+
+        self.assertEqual(len(violations), 1)
+        self.assertEqual(violations[0].rule_id, "7.7")
+        self.assertIn("wide-character", violations[0].explanation.lower())
+
+    def test_rule_77_ignores_regular_character_literals(self):
+        code = "char value = 'x';\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.7"])
+
+        self.assertEqual(violations, [])
+
+    def test_rule_77_ignores_const_wide_character_literals(self):
+        code = "const wchar_t value = L'x';\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.7"])
+
+        self.assertEqual(violations, [])
+
+    def test_rule_76_and_rule_77_execute_together(self):
+        code = "int value = 'ab';\nwchar_t wide = L'x';\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["7.6", "7.7"])
+
+        self.assertEqual({violation.rule_id for violation in violations}, {"7.6", "7.7"})
+
     def test_rule_814_reports_register_storage_class_specifier(self):
         code = "register int value = 1;\n"
         violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.14"])
@@ -279,11 +325,11 @@ class RuleEngineModule2Test(unittest.TestCase):
     def test_filters_disabled_rule(self):
         engine = RuleEngine(config={"disabled_rules": ["8.1"]})
 
-        self.assertEqual(engine.enabled_rules(), 18)
+        self.assertEqual(engine.enabled_rules(), 20)
         self.assertEqual(engine.execute("static int x = 1;\n", "unit.c"), [])
         self.assertEqual(
             [rule.rule_id for rule in engine.get_rules(include_disabled=True)],
-            ["7.1", "7.2", "7.3", "7.4", "7.5", "8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3", "8.14"],
+            ["7.1", "7.2", "7.3", "7.4", "7.5", "7.6", "8.1", "7.7", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3", "8.14"],
         )
 
     def test_filters_by_enabled_rule_and_chapter(self):

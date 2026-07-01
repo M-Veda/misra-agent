@@ -14,6 +14,8 @@ _INTEGER_LITERAL_PATTERN = re.compile(
 )
 _STRING_LITERAL_PATTERN = re.compile(r'"(?:\\.|[^"\\])*"')
 _CHARACTER_LITERAL_PATTERN = re.compile(r"'(?:\\.|[^'\\])'")
+_MULTI_CHARACTER_LITERAL_PATTERN = re.compile(r"'(?:\\.|[^'\\]){2,}'")
+_WIDE_CHARACTER_LITERAL_PATTERN = re.compile(r"(?:^|[^A-Za-z0-9_])(L|u8|u|U)'(?:\\.|[^'\\])'")
 
 
 class Rule71(BaseRule):
@@ -208,5 +210,78 @@ class Rule75(BaseRule):
                         explanation="A character literal is assigned to a non-const object; make the object const-qualified or use a different initialization approach.",
                     )
                 )
+        return violations
+
+
+class Rule76(BaseRule):
+    RULE_ID = "7.6"
+    TITLE = "Multi-character literals shall not be used"
+    CHAPTER = "7"
+    CATEGORY = "Expressions"
+    SEVERITY = "Required"
+    DESCRIPTION = "Multi-character literals should not be used."
+    RATIONALE = "Multi-character literals are implementation-defined and can be misleading in source code."
+    FIXABLE = False
+    REFERENCES = ("MISRA C:2012 Rule 7.6",)
+    PRIORITY = 30
+    CAPABILITIES = ("text",)
+    METADATA = {"chapter_title": "Expressions", "analysis": "text"}
+
+    def check(self, code, file_path):
+        violations = []
+        for line_number, raw_line in enumerate(code.splitlines(), start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            candidate_line = strip_comments(line)
+            for match in _MULTI_CHARACTER_LITERAL_PATTERN.finditer(candidate_line):
+                violations.append(
+                    self.create_violation(
+                        file_path=file_path,
+                        line=line_number,
+                        original=line,
+                        explanation=f"Multi-character literal '{match.group(0)}' is not permitted; use separate character constants or a string literal instead.",
+                    )
+                )
+                break
+        return violations
+
+
+class Rule77(BaseRule):
+    RULE_ID = "7.7"
+    TITLE = "Wide-character literals shall not be used"
+    CHAPTER = "7"
+    CATEGORY = "Expressions"
+    SEVERITY = "Required"
+    DESCRIPTION = "Wide-character literals should not be used."
+    RATIONALE = "Wide-character literals are less portable and can obscure the intended character semantics."
+    FIXABLE = False
+    REFERENCES = ("MISRA C:2012 Rule 7.7",)
+    PRIORITY = 31
+    CAPABILITIES = ("text",)
+    METADATA = {"chapter_title": "Expressions", "analysis": "text"}
+
+    def check(self, code, file_path):
+        violations = []
+        for line_number, raw_line in enumerate(code.splitlines(), start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            candidate_line = strip_comments(line)
+            for match in _WIDE_CHARACTER_LITERAL_PATTERN.finditer(candidate_line):
+                literal = match.group(0).strip()
+                if re.search(r"\bconst\b", candidate_line):
+                    continue
+                violations.append(
+                    self.create_violation(
+                        file_path=file_path,
+                        line=line_number,
+                        original=line,
+                        explanation=f"Wide-character literal '{literal}' is not permitted; use a regular character literal or string literal instead.",
+                    )
+                )
+                break
         return violations
 
