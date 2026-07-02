@@ -57,6 +57,67 @@ class Module4ASTIntegrationTest(unittest.TestCase):
         cfg = FlowAnalyzer().analyze(context)
         self.assertTrue(cfg.nodes or cfg.edges or not context.parse_error)
 
+    def test_semantic_analyzer_collects_structured_declarations_and_bitfields(self):
+        source = """
+typedef unsigned char u8;
+struct S { int a:4; };
+void f(void) {
+    signed char sc = 0;
+    unsigned char uc = 0;
+    char ch = 0;
+    const char *pc = 0;
+}
+"""
+        context = ASTExtractor().extract_from_source(source)
+
+        typedefs = context.get_declarations(kind="typedef")
+        self.assertTrue(any(decl.name == "u8" for decl in typedefs))
+
+        fields = context.get_declarations(kind="field")
+        bitfield = next((decl for decl in fields if decl.name == "a"), None)
+        self.assertIsNotNone(bitfield)
+        self.assertTrue(bitfield.is_bit_field)
+        self.assertEqual(bitfield.bit_width, "4")
+
+        variables = context.get_declarations(kind="variable")
+        signed_char = next((decl for decl in variables if decl.name == "sc"), None)
+        self.assertIsNotNone(signed_char)
+        self.assertEqual(signed_char.type_name, "signed char")
+        self.assertEqual(signed_char.signedness, "signed")
+        self.assertEqual(signed_char.kind, "variable")
+
+        unsigned_char = next((decl for decl in variables if decl.name == "uc"), None)
+        self.assertIsNotNone(unsigned_char)
+        self.assertEqual(unsigned_char.type_name, "unsigned char")
+        self.assertEqual(unsigned_char.signedness, "unsigned")
+
+        plain_char = next((decl for decl in variables if decl.name == "ch"), None)
+        self.assertIsNotNone(plain_char)
+        self.assertEqual(plain_char.type_name, "char")
+        self.assertEqual(plain_char.signedness, "plain")
+
+        const_decl = next((decl for decl in variables if decl.name == "pc"), None)
+        self.assertIsNotNone(const_decl)
+        self.assertIn("const", const_decl.qualifiers)
+
+    def test_type_analyzer_classifies_char_types_and_typedef_aliases(self):
+        source = """
+typedef unsigned char u8;
+void f(void) {
+    signed char sc = 0;
+    unsigned char uc = 0;
+    char ch = 0;
+    u8 alias = 0;
+}
+"""
+        context = ASTExtractor().extract_from_source(source)
+        type_info = TypeAnalyzer().analyze(context)
+
+        self.assertTrue(any(item.get("name") == "sc" and item.get("kind") == "char" and item.get("signedness") == "signed" for item in type_info))
+        self.assertTrue(any(item.get("name") == "uc" and item.get("kind") == "char" and item.get("signedness") == "unsigned" for item in type_info))
+        self.assertTrue(any(item.get("name") == "ch" and item.get("kind") == "char" and item.get("signedness") == "plain" for item in type_info))
+        self.assertTrue(any(item.get("name") == "alias" and item.get("kind") == "typedef" and item.get("alias_of") == "unsigned char" for item in type_info))
+
     def test_ast_patch_strategy_applies_ast_replacement(self):
         patch = type(
             "PatchStub",

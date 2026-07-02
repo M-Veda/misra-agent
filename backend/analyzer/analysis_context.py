@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from analyzer.declaration_model import Declaration
+
 
 @dataclass(slots=True)
 class AnalysisContext:
@@ -14,3 +16,9 @@ class AnalysisContext:
     cfg: Any = None
     visitor: Any = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    declarations: List[Declaration] = field(default_factory=list)
+
+    def get_declarations(self, kind: Optional[str] = None):
+        if kind is None:
+            return list(self.declarations)
+        return [decl for decl in self.declarations if decl.kind == kind]

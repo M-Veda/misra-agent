@@ -4,6 +4,7 @@ from analyzer.cfg_builder import CFGBuilder
 from analyzer.clang_parser import ClangParser
 from analyzer.symbol_table import SymbolTableBuilder
 from analyzer.type_analyzer import TypeAnalyzer
+from analyzer.declaration_model import Declaration
 
 
 class ASTExtractor:
@@ -24,6 +25,7 @@ class ASTExtractor:
                 visitor=ASTVisitor(ast=parsed),
             )
             context.visitor.visit(parsed)
+            context.declarations = self._declarations_from_visitor(context.visitor)
             context.symbol_table = self.symbol_builder.build(context)
             context.type_information = self.type_analyzer.analyze(context)
             context.cfg = self.cfg_builder.build(context)
@@ -40,7 +42,32 @@ class ASTExtractor:
     def extract_from_source(self, source_code):
         context = AnalysisContext(file_path="<memory>", source_code=source_code, available=True, ast={"source": source_code}, visitor=ASTVisitor(ast={"source": source_code}))
         context.visitor.visit(context.ast)
+        context.declarations = self._declarations_from_visitor(context.visitor)
         context.symbol_table = self.symbol_builder.build(context)
         context.type_information = self.type_analyzer.analyze(context)
         context.cfg = self.cfg_builder.build(context)
         return context
+
+    def _declarations_from_visitor(self, visitor):
+        declarations = []
+        for declaration in getattr(visitor, "find_declarations", lambda: [])():
+            if isinstance(declaration, Declaration):
+                declarations.append(declaration)
+                continue
+            if isinstance(declaration, dict):
+                declarations.append(
+                    Declaration(
+                        kind=declaration.get("kind", "unknown"),
+                        name=declaration.get("name"),
+                        type_name=declaration.get("type_name"),
+                        storage_specifiers=tuple(declaration.get("storage_specifiers", [])),
+                        qualifiers=tuple(declaration.get("qualifiers", [])),
+                        is_bit_field=declaration.get("is_bit_field", False),
+                        bit_width=declaration.get("bit_width"),
+                        line=declaration.get("line"),
+                        column=declaration.get("column"),
+                        signedness=declaration.get("signedness"),
+                        alias_of=declaration.get("alias_of"),
+                    )
+                )
+        return declarations
