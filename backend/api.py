@@ -14,6 +14,7 @@ from config.settings import INPUT_DIR, ensure_runtime_directories
 from schemas.review import DecisionRequest
 from services.analysis_service import AnalysisService
 from services.review_service import ReviewService
+from utils.logger import logger
 
 app = FastAPI(title="MISRA AI Agent", version="2.0")
 
@@ -53,6 +54,7 @@ async def upload_code(file: UploadFile = File(...)):
         analysis_service.start_analysis(session_id=session_id, file_path=str(file_path))
         return review_service.status(session_id)
     except Exception as exc:
+        logger.exception("Upload request failed for %s", file.filename)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
@@ -92,6 +94,8 @@ def _service_call(callback):
     try:
         return callback()
     except KeyError as exc:
+        logger.warning("Review session lookup failed: %s", exc)
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
+        logger.warning("Review workflow error: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc

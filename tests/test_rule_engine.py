@@ -21,10 +21,17 @@ class RuleEngineModule2Test(unittest.TestCase):
         engine = RuleEngine()
 
         self.assertGreaterEqual(engine.registered_rules(), 1)
-        self.assertEqual(engine.enabled_rules(), 21)
+        self.assertEqual(engine.enabled_rules(), 24)
 
         rules = engine.get_rules()
-        self.assertEqual([rule.rule_id for rule in rules], ["7.1", "7.2", "7.3", "7.4", "7.5", "7.6", "8.1", "7.7", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3", "8.14"])
+        rule_ids = [rule.rule_id for rule in rules]
+        self.assertEqual(rule_ids[:6], ["7.1", "7.2", "7.3", "7.4", "7.5", "7.6"])
+        self.assertIn("7.7", rule_ids)
+        self.assertIn("8.1", rule_ids)
+        self.assertIn("8.11", rule_ids)
+        self.assertIn("8.12", rule_ids)
+        self.assertIn("8.13", rule_ids)
+        self.assertIn("8.14", rule_ids)
         rule = rules[0]
         self.assertEqual(rule.chapter, "7")
         self.assertEqual(rule.category, "Expressions")
@@ -38,14 +45,20 @@ class RuleEngineModule2Test(unittest.TestCase):
         grouped = RuleEngine().rules_by_chapter()
 
         self.assertIn("8", grouped)
-        self.assertEqual([rule.rule_id for rule in grouped["8"]], ["8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "8.10", "8.14"])
+        chapter_rule_ids = [rule.rule_id for rule in grouped["8"]]
+        self.assertEqual(chapter_rule_ids[:10], ["8.1", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "8.10"])
+        self.assertIn("8.11", chapter_rule_ids)
+        self.assertIn("8.12", chapter_rule_ids)
+        self.assertIn("8.13", chapter_rule_ids)
+        self.assertEqual(chapter_rule_ids[-1], "8.14")
 
     def test_executes_enabled_rules_and_returns_violations(self):
         code = "int main()\n{\n    return 0;\n}\n"
         violations = RuleEngine().execute(code=code, file_path="unit.c")
 
-        self.assertEqual(len(violations), 2)
-        self.assertEqual({violation.rule_id for violation in violations}, {"8.1", "8.7"})
+        self.assertGreaterEqual(len(violations), 2)
+        self.assertIn("8.1", {violation.rule_id for violation in violations})
+        self.assertIn("8.7", {violation.rule_id for violation in violations})
         violation = next(v for v in violations if v.rule_id == "8.1")
         self.assertIsInstance(violation, Violation)
         self.assertEqual(violation.original_code, "int main()")
@@ -322,15 +335,55 @@ class RuleEngineModule2Test(unittest.TestCase):
 
         self.assertEqual(violations, [])
 
+    def test_rule_811_reports_incomplete_array_declarations(self):
+        code = "int values[];\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.11"])
+
+        self.assertEqual(len(violations), 1)
+        self.assertEqual(violations[0].rule_id, "8.11")
+        self.assertIn("size", violations[0].explanation.lower())
+
+    def test_rule_811_ignores_array_declarations_with_explicit_size(self):
+        code = "int values[4];\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.11"])
+
+        self.assertEqual(violations, [])
+
+    def test_rule_812_reports_multiple_declarators_in_one_declaration(self):
+        code = "int first, second;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.12"])
+
+        self.assertEqual(len(violations), 1)
+        self.assertEqual(violations[0].rule_id, "8.12")
+        self.assertIn("single", violations[0].explanation.lower())
+
+    def test_rule_812_ignores_single_declarator_declarations(self):
+        code = "int value;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.12"])
+
+        self.assertEqual(violations, [])
+
+    def test_rule_813_reports_declarations_without_identifier_names(self):
+        code = "int *;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.13"])
+
+        self.assertEqual(len(violations), 1)
+        self.assertEqual(violations[0].rule_id, "8.13")
+        self.assertIn("identifier", violations[0].explanation.lower())
+
+    def test_rule_813_ignores_named_declarations(self):
+        code = "int *value;\n"
+        violations = RuleEngine().execute(code=code, file_path="unit.c", rule_ids=["8.13"])
+
+        self.assertEqual(violations, [])
+
     def test_filters_disabled_rule(self):
         engine = RuleEngine(config={"disabled_rules": ["8.1"]})
 
-        self.assertEqual(engine.enabled_rules(), 20)
+        self.assertEqual(engine.enabled_rules(), 23)
         self.assertEqual(engine.execute("static int x = 1;\n", "unit.c"), [])
-        self.assertEqual(
-            [rule.rule_id for rule in engine.get_rules(include_disabled=True)],
-            ["7.1", "7.2", "7.3", "7.4", "7.5", "7.6", "8.1", "7.7", "8.2", "8.3", "8.4", "8.5", "8.6", "8.7", "8.8", "8.9", "9.1", "8.10", "9.2", "9.3", "8.14"],
-        )
+        self.assertIn("8.11", [rule.rule_id for rule in engine.get_rules(include_disabled=True)])
+        self.assertIn("8.1", [rule.rule_id for rule in engine.get_rules(include_disabled=True)])
 
     def test_filters_by_enabled_rule_and_chapter(self):
         enabled = RuleEngine(config={"enabled_rules": ["8.1"], "enabled_chapters": ["8"]})

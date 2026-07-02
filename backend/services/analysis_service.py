@@ -4,6 +4,7 @@ from config.settings import ENABLE_CPPCHECK
 from models.session_state import SessionState
 from rules.rule_engine import RuleEngine
 from services.session_service import SessionService
+from utils.logger import logger
 
 
 class AnalysisService:
@@ -13,10 +14,19 @@ class AnalysisService:
         self.ast_extractor = ASTExtractor()
 
     def start_analysis(self, session_id, file_path):
-        with open(file_path, "r", encoding="utf-8") as source_file:
-            source = source_file.read()
+        try:
+            with open(file_path, "r", encoding="utf-8") as source_file:
+                source = source_file.read()
+        except UnicodeDecodeError as exc:
+            logger.exception("Failed to read source file %s as UTF-8", file_path)
+            source = ""
 
-        analysis_context = self.ast_extractor.extract(file_path)
+        try:
+            analysis_context = self.ast_extractor.extract(file_path)
+        except Exception as exc:
+            logger.exception("AST extraction failed for %s", file_path)
+            analysis_context = None
+
         violations = self.rule_engine.execute(source, file_path, analysis_context=analysis_context)
         if violations:
             violations = [violations[0]]

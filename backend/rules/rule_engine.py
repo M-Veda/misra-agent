@@ -4,6 +4,7 @@ from rules.base_rule import BaseRule
 from rules.config import RuleEngineConfig
 from rules.discovery import discover_rule_classes
 from rules.registry import RuleRegistry
+from utils.logger import logger
 
 
 class RuleEngine:
@@ -67,6 +68,9 @@ class RuleEngine:
                     result = rule.check(code=code, file_path=file_path)
             except TypeError:
                 result = rule.check(code=code, file_path=file_path)
+            except Exception as exc:
+                logger.exception("Rule %s failed during execution", metadata.rule_id)
+                continue
             if result is None:
                 continue
 

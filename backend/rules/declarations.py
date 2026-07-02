@@ -176,6 +176,20 @@ def _extract_function_definitions(code):
     return functions
 
 
+def _iter_simple_declarations(code):
+    for line_number, raw_line in enumerate(code.splitlines(), start=1):
+        line = strip_comments(raw_line)
+        match_result = full_declaration_match(line)
+        if not match_result:
+            continue
+
+        declaration = match_result.group("decl")
+        if is_function_prototype(declaration) or declaration_has_storage_class(declaration, "typedef"):
+            continue
+
+        yield line_number, declaration, raw_line.strip()
+
+
 class Rule81(BaseRule):
     RULE_ID = "8.1"
     TITLE = "Function shall have prototype"
@@ -508,6 +522,104 @@ class Rule87(BaseRule):
 
     def check_with_context(self, code, file_path, analysis_context=None):
         return self.check(code, file_path)
+
+
+class Rule811(BaseRule):
+    RULE_ID = "8.11"
+    TITLE = "An array shall not be declared without a size"
+    CHAPTER = "8"
+    CATEGORY = "Declarations and definitions"
+    SEVERITY = "Required"
+    DESCRIPTION = "Arrays shall be declared with an explicit size."
+    RATIONALE = "Explicit array sizes make object layout and bounds clear and avoid incomplete-type surprises."
+    FIXABLE = False
+    REFERENCES = ("MISRA C:2012 Rule 8.11",)
+    PRIORITY = 36
+    CAPABILITIES = ("text",)
+    METADATA = {"chapter_title": "Declarations and definitions", "analysis": "text"}
+
+    def check(self, code, file_path):
+        violations = []
+        for line_number, declaration, original in _iter_simple_declarations(code):
+            for declarator in extract_declarators(declaration):
+                if re.search(r"\[\s*\]", declarator):
+                    violations.append(
+                        self.create_violation(
+                            file_path=file_path,
+                            line=line_number,
+                            original=original,
+                            explanation=(
+                                "Array declarators should specify an explicit size instead of using an empty bracket form."
+                            ),
+                        )
+                    )
+                    break
+        return violations
+
+
+class Rule812(BaseRule):
+    RULE_ID = "8.12"
+    TITLE = "A declaration shall contain no more than one declarator"
+    CHAPTER = "8"
+    CATEGORY = "Declarations and definitions"
+    SEVERITY = "Required"
+    DESCRIPTION = "A declaration should contain a single declarator to keep the intent explicit."
+    RATIONALE = "Multiple declarators in one declaration make the declaration harder to read and reason about."
+    FIXABLE = False
+    REFERENCES = ("MISRA C:2012 Rule 8.12",)
+    PRIORITY = 37
+    CAPABILITIES = ("text",)
+    METADATA = {"chapter_title": "Declarations and definitions", "analysis": "text"}
+
+    def check(self, code, file_path):
+        violations = []
+        for line_number, declaration, original in _iter_simple_declarations(code):
+            declarators = extract_declarators(declaration)
+            if len(declarators) > 1:
+                violations.append(
+                    self.create_violation(
+                        file_path=file_path,
+                        line=line_number,
+                        original=original,
+                        explanation=(
+                            "This declaration contains multiple declarators; keep a single declarator per declaration for clarity."
+                        ),
+                    )
+                )
+        return violations
+
+
+class Rule813(BaseRule):
+    RULE_ID = "8.13"
+    TITLE = "A declaration shall declare an identifier"
+    CHAPTER = "8"
+    CATEGORY = "Declarations and definitions"
+    SEVERITY = "Required"
+    DESCRIPTION = "Each declarator should declare an identifier rather than omitting the name."
+    RATIONALE = "Omitting the identifier makes declarations ambiguous and hard to maintain."
+    FIXABLE = False
+    REFERENCES = ("MISRA C:2012 Rule 8.13",)
+    PRIORITY = 38
+    CAPABILITIES = ("text",)
+    METADATA = {"chapter_title": "Declarations and definitions", "analysis": "text"}
+
+    def check(self, code, file_path):
+        violations = []
+        for line_number, declaration, original in _iter_simple_declarations(code):
+            for declarator in extract_declarators(declaration):
+                if extract_symbol(declarator) is None:
+                    violations.append(
+                        self.create_violation(
+                            file_path=file_path,
+                            line=line_number,
+                            original=original,
+                            explanation=(
+                                "This declaration does not declare an identifier; provide a named declarator."
+                            ),
+                        )
+                    )
+                    break
+        return violations
 
 
 class Rule814(BaseRule):
