@@ -1,4 +1,4 @@
-import re
+﻿import re
 
 
 class SymbolTableBuilder:
@@ -16,6 +16,7 @@ class SymbolTableBuilder:
                         "type_name": declaration.type_name,
                         "is_bit_field": declaration.is_bit_field,
                         "bit_width": declaration.bit_width,
+                        "signedness": declaration.signedness,
                     }
             if symbols:
                 return symbols
@@ -27,3 +28,4 @@ class SymbolTableBuilder:
             name = match.group(1)
             symbols[name] = {"kind": "variable", "line": source[match.start():match.end()]}
         return symbols
+

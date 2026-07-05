@@ -1,5 +1,6 @@
-import re
+﻿import re
 
+from analyzer.declaration_model import declaration_scope_depth, declaration_source, declaration_type_signature
 from rules.base_rule import BaseRule
 from rules.rule_helpers import (
     declaration_has_storage_class,
@@ -190,6 +191,58 @@ def _iter_simple_declarations(code):
         yield line_number, declaration, raw_line.strip()
 
 
+def _context_declarations(analysis_context, kinds=None):
+    if not analysis_context or not getattr(analysis_context, "available", False):
+        return []
+    get_declarations = getattr(analysis_context, "get_declarations", None)
+    if not callable(get_declarations):
+        return []
+    declarations = get_declarations()
+    if kinds is not None:
+        declarations = [declaration for declaration in declarations if getattr(declaration, "kind", None) in kinds]
+    return declarations
+
+
+def _analysis_available(analysis_context):
+    return bool(analysis_context and getattr(analysis_context, "available", False))
+
+
+def _declaration_signature_from_context(declaration):
+    return declaration_type_signature(declaration)
+
+
+def _declaration_original(declaration):
+    return declaration_source(declaration).strip()
+
+
+def _function_parameters(declaration):
+    raw = getattr(declaration, "raw", None)
+    if isinstance(raw, dict):
+        return raw.get("parameters")
+    return None
+
+
+def _non_static_file_scope_declarations(analysis_context, kinds):
+    declarations = []
+    for declaration in _context_declarations(analysis_context, kinds):
+        if declaration_scope_depth(declaration) != 0:
+            continue
+        storage_specifiers = set(getattr(declaration, "storage_specifiers", ()) or ())
+        if storage_specifiers.intersection({"static", "extern", "typedef"}):
+            continue
+        declarations.append(declaration)
+    return declarations
+
+
+def _file_scope_objects_from_context(analysis_context):
+    objects = []
+    for declaration in _non_static_file_scope_declarations(analysis_context, {"variable"}):
+        if not declaration.name:
+            continue
+        objects.append({"name": declaration.name, "line": declaration.line or 1})
+    return objects
+
+
 class Rule81(BaseRule):
     RULE_ID = "8.1"
     TITLE = "Function shall have prototype"
@@ -233,7 +286,36 @@ class Rule81(BaseRule):
         return violations
 
     def check_with_context(self, code, file_path, analysis_context=None):
-        return self.check(code, file_path)
+        functions = _context_declarations(analysis_context, {"function"})
+        if not functions:
+            return self.check(code, file_path)
+
+        violations = []
+        handled = False
+        for declaration in functions:
+            parameter_list = _function_parameters(declaration)
+            if parameter_list is None:
+                continue
+            handled = True
+            if parameter_list.strip():
+                continue
+
+            original = declaration_snippet(_declaration_original(declaration))
+            suggestion = re.sub(r"\(\s*\)", "(void)", original, count=1)
+            violations.append(
+                self.create_violation(
+                    file_path=file_path,
+                    line=declaration.line or 1,
+                    original=original,
+                    suggestion=suggestion,
+                    explanation=(
+                        "Function declarations with empty parameter lists should be rewritten "
+                        "using explicit void notation to form a complete prototype."
+                    ),
+                )
+            )
+
+        return violations if handled else self.check(code, file_path)
 
     def suggest_fix(self, violation):
         return violation.suggested_code or None
@@ -284,8 +366,40 @@ class Rule82(BaseRule):
         return violations
 
     def check_with_context(self, code, file_path, analysis_context=None):
-        return self.check(code, file_path)
+        functions = _context_declarations(analysis_context, {"function"})
+        if not functions:
+            return self.check(code, file_path)
 
+        violations = []
+        handled = False
+        for declaration in functions:
+            parameter_list = _function_parameters(declaration)
+            if parameter_list is None:
+                continue
+            handled = True
+            if not parameter_list.strip() or parameter_list.strip() == "void":
+                continue
+
+            for token in _split_parameters(parameter_list):
+                if not _contains_named_parameter(token):
+                    original = declaration_snippet(_declaration_original(declaration))
+                    violations.append(
+                        self.create_violation(
+                            file_path=file_path,
+                            line=declaration.line or 1,
+                            original=original,
+                            suggestion=(
+                                "Review this declaration and add explicit parameter names where missing."
+                            ),
+                            explanation=(
+                                "Function declarations should specify parameter names for every parameter "
+                                "to make the interface explicit."
+                            ),
+                        )
+                    )
+                    break
+
+        return violations if handled else self.check(code, file_path)
 
 class Rule83(BaseRule):
     RULE_ID = "8.3"
@@ -302,64 +416,86 @@ class Rule83(BaseRule):
     METADATA = {"chapter_title": "Declarations and definitions", "analysis": "hybrid"}
 
     def check(self, code, file_path):
+        return self._check(code, file_path, analysis_context=None)
+
+    def check_with_context(self, code, file_path, analysis_context=None):
+        return self._check(code, file_path, analysis_context=analysis_context)
+
+    def _check(self, code, file_path, analysis_context=None):
         violations = []
         seen_symbols = {}
 
-        for line_number, raw_line in enumerate(code.splitlines(), start=1):
-            line = strip_comments(raw_line)
-            match_result = full_declaration_match(line)
-            if not match_result:
-                continue
+        context_declarations = _context_declarations(analysis_context, {"variable"})
+        use_context = bool(context_declarations)
+        declarations = context_declarations if use_context else []
+        if not use_context:
+            for line_number, raw_line in enumerate(code.splitlines(), start=1):
+                line = strip_comments(raw_line)
+                match_result = full_declaration_match(line)
+                if not match_result:
+                    continue
+                declaration = match_result.group("decl")
+                if is_function_prototype(declaration) or declaration_has_storage_class(declaration, "typedef"):
+                    continue
+                declarations.append({"declaration": declaration, "line": line_number, "raw_line": raw_line.strip()})
 
-            declaration = match_result.group("decl")
-            if is_function_prototype(declaration) or declaration_has_storage_class(declaration, "typedef"):
-                continue
-
-            signature = normalize_declaration_signature(declaration)
-            if not signature:
-                continue
-
-            for declarator in extract_declarators(declaration):
-                symbol = extract_symbol(declarator)
+        for entry in declarations:
+            if use_context:
+                symbol = getattr(entry, "name", None)
                 if not symbol:
                     continue
-
-                previous = seen_symbols.get(symbol)
-                if previous is None:
-                    seen_symbols[symbol] = {"signature": signature, "line": line_number}
+                line_number = getattr(entry, "line", None) or 1
+                raw_line = _declaration_original(entry)
+                signature = _declaration_signature_from_context(entry)
+                if not signature:
+                    continue
+            else:
+                declaration = entry["declaration"]
+                line_number = entry["line"]
+                raw_line = entry["raw_line"]
+                if is_function_prototype(declaration) or declaration_has_storage_class(declaration, "typedef"):
                     continue
 
-                if previous["signature"] != signature:
-                    violations.append(
-                        self.create_violation(
-                            file_path=file_path,
-                            line=line_number,
-                            original=raw_line.strip(),
-                            suggestion=(
-                                "Review these declarations and ensure the same type and qualifiers are used for this identifier."
-                            ),
-                            explanation=(
-                                f"Identifier '{symbol}' is declared with inconsistent type information. "
-                                "All declarations of an object or function should use the same type and type qualifiers."
-                            ),
-                            metadata={
-                                "symbol": symbol,
-                                "previous_signature": previous["signature"],
-                                "current_signature": signature,
-                            },
-                        )
+                signature = normalize_declaration_signature(declaration)
+                if not signature:
+                    continue
+
+                declarators = extract_declarators(declaration)
+                symbols = [extract_symbol(declarator) for declarator in declarators]
+                symbols = [symbol for symbol in symbols if symbol]
+                if not symbols:
+                    continue
+                symbol = symbols[0]
+
+            previous = seen_symbols.get(symbol)
+            if previous is None:
+                seen_symbols[symbol] = {"signature": signature, "line": line_number}
+                continue
+
+            if previous["signature"] != signature:
+                violations.append(
+                    self.create_violation(
+                        file_path=file_path,
+                        line=line_number,
+                        original=raw_line.strip(),
+                        suggestion=(
+                            "Review these declarations and ensure the same type and qualifiers are used for this identifier."
+                        ),
+                        explanation=(
+                            f"Identifier '{symbol}' is declared with inconsistent type information. "
+                            "All declarations of an object or function should use the same type and type qualifiers."
+                        ),
+                        metadata={
+                            "symbol": symbol,
+                            "previous_signature": previous["signature"],
+                            "current_signature": signature,
+                            "analysis_available": _analysis_available(analysis_context),
+                        },
                     )
-                    break
+                )
+                break
 
         return violations
-
-    def check_with_context(self, code, file_path, analysis_context=None):
-        violations = self.check(code, file_path)
-        if analysis_context and getattr(analysis_context, "available", False):
-            for violation in violations:
-                violation.metadata["analysis_available"] = True
-        return violations
-
 
 class Rule85(BaseRule):
     RULE_ID = "8.5"
@@ -376,57 +512,81 @@ class Rule85(BaseRule):
     METADATA = {"chapter_title": "Declarations and definitions", "analysis": "hybrid"}
 
     def check(self, code, file_path):
+        return self._check(code, file_path, analysis_context=None)
+
+    def check_with_context(self, code, file_path, analysis_context=None):
+        return self._check(code, file_path, analysis_context=analysis_context)
+
+    def _check(self, code, file_path, analysis_context=None):
         violations = []
         seen_symbols = {}
 
-        for line_number, raw_line in enumerate(code.splitlines(), start=1):
-            line = strip_comments(raw_line)
-            match_result = full_declaration_match(line)
-            if not match_result:
-                continue
+        context_declarations = [
+            declaration
+            for declaration in _context_declarations(analysis_context, {"variable"})
+            if "static" not in set(getattr(declaration, "storage_specifiers", ()) or ())
+        ]
+        use_context = bool(context_declarations)
+        declarations = context_declarations if use_context else []
+        if not use_context:
+            for line_number, raw_line in enumerate(code.splitlines(), start=1):
+                line = strip_comments(raw_line)
+                match_result = full_declaration_match(line)
+                if not match_result:
+                    continue
+                declaration = match_result.group("decl")
+                if is_function_prototype(declaration) or declaration_has_storage_class(declaration, "typedef"):
+                    continue
+                if declaration_has_storage_class(declaration, "static"):
+                    continue
+                declarations.append({"declaration": declaration, "line": line_number, "raw_line": raw_line.strip()})
 
-            declaration = match_result.group("decl")
-            if is_function_prototype(declaration) or declaration_has_storage_class(declaration, "typedef"):
-                continue
-            if declaration_has_storage_class(declaration, "static"):
-                continue
-
-            for declarator in extract_declarators(declaration):
-                symbol = extract_symbol(declarator)
+        for entry in declarations:
+            if use_context:
+                symbol = getattr(entry, "name", None)
                 if not symbol:
                     continue
-
-                previous = seen_symbols.get(symbol)
-                if previous is None:
-                    seen_symbols[symbol] = line_number
+                line_number = getattr(entry, "line", None) or 1
+                raw_line = _declaration_original(entry)
+            else:
+                declaration = entry["declaration"]
+                line_number = entry["line"]
+                raw_line = entry["raw_line"]
+                for declarator in extract_declarators(declaration):
+                    symbol = extract_symbol(declarator)
+                    if symbol:
+                        break
+                else:
                     continue
 
-                violations.append(
-                    self.create_violation(
-                        file_path=file_path,
-                        line=line_number,
-                        original=raw_line.strip(),
-                        suggestion=(
-                            "Review this declaration and ensure the identifier is not declared more than once."
-                        ),
-                        explanation=(
-                            f"Identifier '{symbol}' is declared more than once in the translation unit. "
-                            "There should be one and only one declaration for an identifier with external linkage."
-                        ),
-                        metadata={"symbol": symbol, "previous_line": previous},
-                    )
+            previous = seen_symbols.get(symbol)
+            if previous is None:
+                seen_symbols[symbol] = line_number
+                continue
+
+            violations.append(
+                self.create_violation(
+                    file_path=file_path,
+                    line=line_number,
+                    original=raw_line.strip(),
+                    suggestion=(
+                        "Review this declaration and ensure the identifier is not declared more than once."
+                    ),
+                    explanation=(
+                        f"Identifier '{symbol}' is declared more than once in the translation unit. "
+                        "There should be one and only one declaration for an identifier with external linkage."
+                    ),
+                    metadata={
+                        "symbol": symbol,
+                        "previous_line": previous,
+                        "analysis_available": _analysis_available(analysis_context),
+                    },
                 )
+            )
+            if not use_context:
                 break
 
         return violations
-
-    def check_with_context(self, code, file_path, analysis_context=None):
-        violations = self.check(code, file_path)
-        if analysis_context and getattr(analysis_context, "available", False):
-            for violation in violations:
-                violation.metadata["analysis_available"] = True
-        return violations
-
 
 class Rule84(BaseRule):
     RULE_ID = "8.4"
@@ -470,8 +630,37 @@ class Rule84(BaseRule):
         return violations
 
     def check_with_context(self, code, file_path, analysis_context=None):
-        return self.check(code, file_path)
+        functions = _context_declarations(analysis_context, {"function"})
+        if not functions:
+            return self.check(code, file_path)
 
+        violations = []
+        handled = False
+        for declaration in functions:
+            parameter_list = _function_parameters(declaration)
+            if parameter_list is None:
+                continue
+            handled = True
+            for token in _split_parameters(parameter_list):
+                if _is_pointer_parameter(token):
+                    original = declaration_snippet(_declaration_original(declaration))
+                    violations.append(
+                        self.create_violation(
+                            file_path=file_path,
+                            line=declaration.line or 1,
+                            original=original,
+                            suggestion=(
+                                "Review this pointer parameter and consider using array notation for clarity."
+                            ),
+                            explanation=(
+                                "Pointer notation for function parameters that represent arrays should be reviewed "
+                                "and rewritten using array notation when appropriate."
+                            ),
+                        )
+                    )
+                    break
+
+        return violations if handled else self.check(code, file_path)
 
 class Rule87(BaseRule):
     RULE_ID = "8.7"
@@ -521,8 +710,27 @@ class Rule87(BaseRule):
         return violations
 
     def check_with_context(self, code, file_path, analysis_context=None):
-        return self.check(code, file_path)
+        declarations = _non_static_file_scope_declarations(analysis_context, {"variable", "function"})
+        if not declarations:
+            return self.check(code, file_path)
 
+        violations = []
+        for declaration in declarations:
+            violations.append(
+                self.create_violation(
+                    file_path=file_path,
+                    line=declaration.line or 1,
+                    original=_declaration_original(declaration),
+                    suggestion=(
+                        "Review whether this file-scope declaration should be restricted to internal linkage."
+                    ),
+                    explanation=(
+                        "This declaration has external linkage by default. Confirm whether external linkage "
+                        "is required or whether visibility can be restricted."
+                    ),
+                )
+            )
+        return violations
 
 class Rule811(BaseRule):
     RULE_ID = "8.11"
@@ -680,7 +888,7 @@ class Rule89(BaseRule):
 
     def _check(self, code, file_path, analysis_context=None):
         violations = []
-        objects = _extract_file_scope_objects(code)
+        objects = _file_scope_objects_from_context(analysis_context) or _extract_file_scope_objects(code)
         functions = _extract_function_definitions(code)
         if not objects or not functions:
             return violations
@@ -708,13 +916,12 @@ class Rule89(BaseRule):
                     metadata={
                         "symbol": name,
                         "used_by": users[0],
-                        "analysis_available": bool(analysis_context and getattr(analysis_context, "available", False)),
+                        "analysis_available": _analysis_available(analysis_context),
                     },
                 )
             )
 
         return violations
-
 
 class Rule810(BaseRule):
     RULE_ID = "8.10"
@@ -739,6 +946,11 @@ class Rule810(BaseRule):
     def _check(self, code, file_path, analysis_context=None):
         violations = []
         functions = _extract_function_definitions(code)
+        function_declarations = {
+            declaration.name: declaration
+            for declaration in _non_static_file_scope_declarations(analysis_context, {"function"})
+            if declaration.name
+        }
         if not functions:
             return violations
 
@@ -757,10 +969,11 @@ class Rule810(BaseRule):
             if len(set(callers)) != 1:
                 continue
 
+            declaration = function_declarations.get(name)
             violations.append(
                 self.create_violation(
                     file_path=file_path,
-                    line=function["line"],
+                    line=(getattr(declaration, "line", None) or function["line"]),
                     original=name,
                     suggestion="Consider whether this function should be restricted to the single caller that uses it.",
                     explanation=(
@@ -770,7 +983,7 @@ class Rule810(BaseRule):
                     metadata={
                         "symbol": name,
                         "called_by": callers[0],
-                        "analysis_available": bool(analysis_context and getattr(analysis_context, "available", False)),
+                        "analysis_available": _analysis_available(analysis_context),
                     },
                 )
             )

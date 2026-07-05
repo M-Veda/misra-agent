@@ -1,9 +1,10 @@
-﻿from analyzer.analysis_context import AnalysisContext
+from analyzer.analysis_context import AnalysisContext
 from analyzer.ast_visitor import ASTVisitor
 from analyzer.cfg_builder import CFGBuilder
 from analyzer.clang_parser import ClangParser
 from analyzer.symbol_table import SymbolTableBuilder
 from analyzer.type_analyzer import TypeAnalyzer
+from analyzer.declaration_model import Declaration
 
 
 class ASTExtractor:
@@ -49,9 +50,15 @@ class ASTExtractor:
             ast=parsed,
             visitor=visitor,
             parse_error=parse_error,
-            declarations=getattr(visitor, "declarations", []),
         )
+        context.set_declarations(self._declarations_from_visitor(visitor))
         context.symbol_table = self.symbol_builder.build(context)
         context.type_information = self.type_analyzer.analyze(context)
         context.cfg = self.cfg_builder.build(context)
         return context
+
+    def _declarations_from_visitor(self, visitor):
+        declarations = []
+        for declaration in getattr(visitor, "find_declarations", lambda: [])():
+            declarations.append(Declaration.from_mapping(declaration))
+        return declarations

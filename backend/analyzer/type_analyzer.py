@@ -1,19 +1,29 @@
+﻿from analyzer.declaration_model import infer_signedness
+
+
 class TypeAnalyzer:
     def analyze(self, analysis_context):
         declarations = getattr(analysis_context, "get_declarations", None)
         if callable(declarations):
+            declarations = declarations()
             typedef_map = {}
-            for declaration in declarations():
+            typedef_signedness = {}
+            for declaration in declarations:
                 if declaration.kind == "typedef" and declaration.name:
                     typedef_map[declaration.name] = declaration.type_name
+                    typedef_signedness[declaration.name] = declaration.signedness or infer_signedness(declaration.type_name)
 
             types = []
-            for declaration in declarations():
+            for declaration in declarations:
                 if not declaration.name:
                     continue
                 signedness = declaration.signedness
                 if signedness is None:
-                    signedness = self._infer_signedness(declaration)
+                    signedness = analysis_context.signedness.get(declaration.name)
+                if signedness is None and declaration.type_name in typedef_signedness:
+                    signedness = typedef_signedness[declaration.type_name]
+                if signedness is None:
+                    signedness = infer_signedness(declaration.type_name)
                 if declaration.kind == "typedef":
                     types.append(
                         {
@@ -62,17 +72,4 @@ class TypeAnalyzer:
         return types
 
     def _infer_signedness(self, declaration):
-        if not declaration.type_name:
-            return None
-        lowered = declaration.type_name.lower()
-        if lowered.startswith("unsigned"):
-            return "unsigned"
-        if lowered.startswith("signed"):
-            return "signed"
-        if lowered == "char":
-            return "plain"
-        if lowered.endswith("char") and "signed" in lowered:
-            return "signed"
-        if lowered.endswith("char") and "unsigned" in lowered:
-            return "unsigned"
-        return None
+        return infer_signedness(getattr(declaration, "type_name", None))

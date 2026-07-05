@@ -28,8 +28,7 @@ class AnalysisService:
             analysis_context = None
 
         violations = self.rule_engine.execute(source, file_path, analysis_context=analysis_context)
-        if violations:
-            violations = [violations[0]]
+
         analysis_report = run_cppcheck_analysis(file_path) if ENABLE_CPPCHECK else ""
 
         session = {

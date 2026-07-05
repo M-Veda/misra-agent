@@ -9,6 +9,8 @@ BACKEND_ROOT = PROJECT_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
+from analyzer.ast_extractor import ASTExtractor
+from analyzer.declaration_model import Declaration
 from rules.base_rule import BaseRule
 from rules.rule_engine import RuleEngine
 from services.analysis_service import AnalysisService
@@ -61,6 +63,22 @@ class ArchitectureImprovementsTest(unittest.TestCase):
         finally:
             if os.path.exists(file_path):
                 os.remove(file_path)
+
+    def test_analysis_context_exposes_canonical_declaration_metadata(self):
+        source = "typedef unsigned char u8; static int counter;"
+        extractor = ASTExtractor()
+        context = extractor.extract_from_source(source)
+
+        self.assertTrue(context.available)
+        declarations = context.get_declarations()
+        self.assertTrue(declarations)
+        self.assertTrue(all(isinstance(decl, Declaration) for decl in declarations))
+        self.assertIn("u8", context.typedefs)
+        self.assertEqual(context.typedefs["u8"].type_name, "unsigned char")
+        self.assertIn("counter", context.storage_classes)
+        self.assertEqual(context.storage_classes["counter"], ("static",))
+        self.assertIn("counter", context.qualifiers)
+        self.assertIn("counter", context.signedness)
 
 
 if __name__ == "__main__":
