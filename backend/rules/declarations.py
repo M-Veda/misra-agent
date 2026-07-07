@@ -285,7 +285,7 @@ class Rule81(BaseRule):
 
         return violations
 
-    def check_with_context(self, code, file_path, analysis_context=None):
+    def check_with_context(self, code, file_path, analysis_context=None, execution_context=None):
         functions = _context_declarations(analysis_context, {"function"})
         if not functions:
             return self.check(code, file_path)
@@ -365,7 +365,7 @@ class Rule82(BaseRule):
 
         return violations
 
-    def check_with_context(self, code, file_path, analysis_context=None):
+    def check_with_context(self, code, file_path, analysis_context=None, execution_context=None):
         functions = _context_declarations(analysis_context, {"function"})
         if not functions:
             return self.check(code, file_path)
@@ -418,7 +418,7 @@ class Rule83(BaseRule):
     def check(self, code, file_path):
         return self._check(code, file_path, analysis_context=None)
 
-    def check_with_context(self, code, file_path, analysis_context=None):
+    def check_with_context(self, code, file_path, analysis_context=None, execution_context=None):
         return self._check(code, file_path, analysis_context=analysis_context)
 
     def _check(self, code, file_path, analysis_context=None):
@@ -514,7 +514,7 @@ class Rule85(BaseRule):
     def check(self, code, file_path):
         return self._check(code, file_path, analysis_context=None)
 
-    def check_with_context(self, code, file_path, analysis_context=None):
+    def check_with_context(self, code, file_path, analysis_context=None, execution_context=None):
         return self._check(code, file_path, analysis_context=analysis_context)
 
     def _check(self, code, file_path, analysis_context=None):
@@ -588,80 +588,6 @@ class Rule85(BaseRule):
 
         return violations
 
-class Rule84(BaseRule):
-    RULE_ID = "8.4"
-    TITLE = "Array declarator parameters shall use array notation"
-    CHAPTER = "8"
-    CATEGORY = "Declarations and definitions"
-    SEVERITY = "Required"
-    DESCRIPTION = "Function parameters representing arrays should be declared using array notation."
-    RATIONALE = "Array notation clarifies the intended use of a parameter as an array."
-    FIXABLE = False
-    REFERENCES = ("MISRA C:2012 Rule 8.4",)
-    PRIORITY = 32
-    CAPABILITIES = ("hybrid",)
-    METADATA = {"chapter_title": "Declarations and definitions", "analysis": "hybrid"}
-
-    def check(self, code, file_path):
-        violations = []
-
-        for match in _FUNCTION_DECL_PATTERN.finditer(code):
-            parameter_list = match.group(2)
-            for token in _split_parameters(parameter_list):
-                if _is_pointer_parameter(token):
-                    original = declaration_snippet(match.group(0))
-                    line = code.count("\n", 0, match.start()) + 1
-                    violations.append(
-                        self.create_violation(
-                            file_path=file_path,
-                            line=line,
-                            original=original,
-                            suggestion=(
-                                "Review this pointer parameter and consider using array notation for clarity."
-                            ),
-                            explanation=(
-                                "Pointer notation for function parameters that represent arrays should be reviewed "
-                                "and rewritten using array notation when appropriate."
-                            ),
-                        )
-                    )
-                    break
-
-        return violations
-
-    def check_with_context(self, code, file_path, analysis_context=None):
-        functions = _context_declarations(analysis_context, {"function"})
-        if not functions:
-            return self.check(code, file_path)
-
-        violations = []
-        handled = False
-        for declaration in functions:
-            parameter_list = _function_parameters(declaration)
-            if parameter_list is None:
-                continue
-            handled = True
-            for token in _split_parameters(parameter_list):
-                if _is_pointer_parameter(token):
-                    original = declaration_snippet(_declaration_original(declaration))
-                    violations.append(
-                        self.create_violation(
-                            file_path=file_path,
-                            line=declaration.line or 1,
-                            original=original,
-                            suggestion=(
-                                "Review this pointer parameter and consider using array notation for clarity."
-                            ),
-                            explanation=(
-                                "Pointer notation for function parameters that represent arrays should be reviewed "
-                                "and rewritten using array notation when appropriate."
-                            ),
-                        )
-                    )
-                    break
-
-        return violations if handled else self.check(code, file_path)
-
 class Rule87(BaseRule):
     RULE_ID = "8.7"
     TITLE = "Objects and functions shall not have external linkage unless required"
@@ -709,7 +635,7 @@ class Rule87(BaseRule):
 
         return violations
 
-    def check_with_context(self, code, file_path, analysis_context=None):
+    def check_with_context(self, code, file_path, analysis_context=None, execution_context=None):
         declarations = _non_static_file_scope_declarations(analysis_context, {"variable", "function"})
         if not declarations:
             return self.check(code, file_path)
@@ -883,7 +809,7 @@ class Rule89(BaseRule):
     def check(self, code, file_path):
         return self._check(code, file_path, analysis_context=None)
 
-    def check_with_context(self, code, file_path, analysis_context=None):
+    def check_with_context(self, code, file_path, analysis_context=None, execution_context=None):
         return self._check(code, file_path, analysis_context=analysis_context)
 
     def _check(self, code, file_path, analysis_context=None):
@@ -940,7 +866,7 @@ class Rule810(BaseRule):
     def check(self, code, file_path):
         return self._check(code, file_path, analysis_context=None)
 
-    def check_with_context(self, code, file_path, analysis_context=None):
+    def check_with_context(self, code, file_path, analysis_context=None, execution_context=None):
         return self._check(code, file_path, analysis_context=analysis_context)
 
     def _check(self, code, file_path, analysis_context=None):

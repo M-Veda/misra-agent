@@ -1,0 +1,3 @@
+int value;
+
+char value;

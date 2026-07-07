@@ -27,45 +27,84 @@ class BaseRule(ABC):
     def metadata(cls):
         cls.validate_metadata()
         return Rule(
-            rule_id=cls.RULE_ID,
-            title=cls.TITLE,
-            chapter=cls.CHAPTER or cls._chapter_from_rule_id(),
-            category=cls.CATEGORY,
-            severity=cls.SEVERITY,
-            description=cls.DESCRIPTION,
-            rationale=cls.RATIONALE,
-            fixable=cls.FIXABLE,
-            auto_fixable=cls.FIXABLE,
-            references=tuple(cls.REFERENCES),
-            priority=cls.PRIORITY,
-            enabled_by_default=cls.ENABLED_BY_DEFAULT,
-            fix_strategy=cls.FIX_STRATEGY,
-            capabilities=tuple(cls.CAPABILITIES or ("text",)),
-            metadata=dict(cls.METADATA),
-        )
+    rule_id=cls.RULE_ID,
+    title=cls.TITLE,
+    chapter=cls.CHAPTER or cls._chapter_from_rule_id(),
+    category=cls.CATEGORY,
+    severity=cls.SEVERITY,
+    description=cls.DESCRIPTION,
+    rationale=cls.RATIONALE,
+    fixable=cls.FIXABLE,
+    auto_fixable=cls.FIXABLE,
+    references=tuple(cls.REFERENCES),
+    priority=cls.PRIORITY,
+    enabled_by_default=cls.ENABLED_BY_DEFAULT,
+    fix_strategy=cls.FIX_STRATEGY,
+    capabilities=tuple(cls.CAPABILITIES or ("text",)),
+    metadata=dict(cls.METADATA),
+)
 
     @classmethod
     def validate_metadata(cls):
         missing = []
-        for field_name in ("RULE_ID", "TITLE", "CHAPTER", "CATEGORY", "SEVERITY", "DESCRIPTION"):
+
+        for field_name in (
+        "RULE_ID",
+        "TITLE",
+        "CHAPTER",
+        "CATEGORY",
+        "SEVERITY",
+        "DESCRIPTION",
+    ):
             if not getattr(cls, field_name, ""):
                 missing.append(field_name)
-        if missing:
-            raise ValueError(f"Rule {cls.__name__} is missing metadata: {', '.join(missing)}")
-        if not isinstance(cls.PRIORITY, int) or cls.PRIORITY < 0:
-            raise ValueError(f"Rule {cls.__name__} priority must be a non-negative integer.")
 
-        capabilities = getattr(cls, "CAPABILITIES", ("text",))
+        if missing:
+            raise ValueError(
+            f"Rule {cls.__name__} is missing metadata: "
+            f"{', '.join(missing)}"
+        )
+
+        if not isinstance(cls.PRIORITY, int) or cls.PRIORITY < 0:
+            raise ValueError(
+            f"Rule {cls.__name__} priority must be "
+            "a non-negative integer."
+        )
+
+        capabilities = getattr(
+        cls,
+        "CAPABILITIES",
+        ("text",),
+    )
+
         if isinstance(capabilities, str):
             capabilities = (capabilities,)
+
         if not capabilities:
             capabilities = ("text",)
+
+        supported_capabilities = {
+        "text",
+        "ast",
+        "hybrid",
+        "semantic",
+    }
+
         for capability in capabilities:
+
             if not isinstance(capability, str):
-                raise TypeError(f"Rule {cls.__name__} capability values must be strings.")
+                raise TypeError(
+                f"Rule {cls.__name__} capability values "
+                "must be strings."
+            )
+
             normalized = capability.strip().lower()
-            if normalized not in {"text", "ast", "hybrid"}:
-                raise ValueError(f"Rule {cls.__name__} declares unsupported capability {capability!r}.")
+
+            if normalized not in supported_capabilities:
+                raise ValueError(
+                f"Rule {cls.__name__} declares unsupported "
+                f"capability {capability!r}."
+            )
 
     @classmethod
     def _chapter_from_rule_id(cls):
@@ -75,8 +114,17 @@ class BaseRule(ABC):
     def check(self, code: str, file_path: str):
         """Return a list of Violation objects for this rule."""
 
-    def check_with_context(self, code: str, file_path: str, analysis_context=None):
-        return self.check(code=code, file_path=file_path)
+    def check_with_context(
+    self,
+    code: str,
+    file_path: str,
+    analysis_context=None,
+    execution_context=None,
+):
+        return self.check(
+        code=code,
+        file_path=file_path,
+    )
 
     def suggest_fix(self, violation):
         return None
@@ -85,15 +133,15 @@ class BaseRule(ABC):
         from rules.violation_factory import create_violation
 
         return create_violation(
-            rule=self,
-            file_path=file_path,
-            line=line,
-            original=original,
-            suggestion=suggestion,
-            explanation=explanation,
-            column=column,
-            metadata=metadata,
-        )
+    rule=self,
+    file_path=file_path,
+    line=line,
+    original=original,
+    suggestion=suggestion,
+    explanation=explanation,
+    column=column,
+    metadata=metadata,
+)
 
     @property
     def id(self):
@@ -125,3 +173,10 @@ class BaseRule(ABC):
 
     def supports_capability(self, capability):
         return capability in self.capabilities
+    
+    def supports_semantic(self):
+        return "semantic" in self.capabilities
+
+
+    def supports_ast(self):
+        return "ast" in self.capabilities

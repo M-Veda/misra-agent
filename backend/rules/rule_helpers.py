@@ -152,3 +152,219 @@ def normalize_declaration_signature(declaration):
 
 def declaration_has_storage_class(declaration, storage_class):
     return bool(re.search(rf"\b{re.escape(storage_class)}\b", declaration or ""))
+
+_IDENTIFIER_PATTERN = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
+
+
+def is_identifier(token):
+    """
+    Returns True if token is a valid C identifier.
+    """
+
+    if token is None:
+        return False
+
+    return bool(_IDENTIFIER_PATTERN.fullmatch(token))
+
+
+def count_pointer_level(declaration):
+    """
+    Returns pointer indirection level.
+
+    Examples
+    --------
+    int a;          -> 0
+    int *a;         -> 1
+    int **a;        -> 2
+    int ***a;       -> 3
+    """
+
+    if not declaration:
+        return 0
+
+    return len(re.findall(r"\*", declaration))
+
+
+def is_array_declaration(declaration):
+    """
+    Detects whether the declaration is an array.
+    """
+
+    return bool(
+    re.search(
+        r"\[[^\]]*\]",
+        declaration or "",
+    )
+)
+
+
+def is_pointer_declaration(declaration):
+    """
+    Detects pointer declarations.
+    """
+
+    return bool(
+    re.search(
+        r"\*",
+        declaration or "",
+    )
+)
+
+
+def remove_initializer(declaration):
+    """
+    Removes initializer while preserving declaration.
+
+    Example:
+        int x = 5;
+        ->
+        int x;
+    """
+
+    if not declaration:
+        return ""
+
+    declaration = re.sub(
+        r"\s*=\s*.*",
+        "",
+        declaration,
+    ).strip()
+
+    if not declaration.endswith(";"):
+        declaration += ";"
+
+    return declaration
+
+
+def declaration_type(declaration):
+    """
+    Returns the primitive type if one exists.
+    """
+
+    declaration = declaration or ""
+
+    primitive_types = (
+        "void",
+        "char",
+        "short",
+        "int",
+        "long",
+        "float",
+        "double",
+        "_Bool",
+        "bool",
+    )
+
+    for primitive in primitive_types:
+
+        if re.search(
+            rf"\b{primitive}\b",
+            declaration,
+        ):
+            return primitive
+
+    return "unknown"
+
+
+def declaration_is_const(declaration):
+    return bool(
+        re.search(
+            r"\bconst\b",
+            declaration or "",
+        )
+    )
+
+
+def declaration_is_static(declaration):
+    return bool(
+        re.search(
+            r"\bstatic\b",
+            declaration or "",
+        )
+    )
+
+
+def declaration_is_extern(declaration):
+    return bool(
+        re.search(
+            r"\bextern\b",
+            declaration or "",
+        )
+    )
+
+
+def normalize_whitespace(text):
+    """
+    Converts multiple whitespace characters
+    into a single space.
+    """
+
+    return re.sub(
+        r"\s+",
+        " ",
+        text or "",
+    ).strip()
+
+
+def safe_lines(code):
+    """
+    Returns code lines while preserving
+    line numbering.
+    """
+
+    if not code:
+        return []
+
+    return code.splitlines()
+
+
+def line_at(code, line_number):
+    """
+    Returns a specific source line.
+    """
+
+    lines = safe_lines(code)
+
+    if 1 <= line_number <= len(lines):
+        return lines[line_number - 1]
+
+    return ""
+
+
+def declaration_is_volatile(declaration):
+    return bool(
+        re.search(
+            r"\bvolatile\b",
+            declaration or "",
+        )
+    )
+
+
+def declaration_is_typedef(declaration):
+    return bool(
+        re.search(
+            r"\btypedef\b",
+            declaration or "",
+        )
+    )
+
+
+def declaration_is_function(declaration):
+    return bool(
+        re.search(
+            r"\([^)]*\)",
+            declaration or "",
+        )
+    )
+
+
+def declaration_is_initialized(declaration):
+    return "=" in (declaration or "")
+
+def contains_keyword(text, keyword):
+    return bool(
+        re.search(
+            rf"\b{re.escape(keyword)}\b",
+            text or "",
+        )
+    )

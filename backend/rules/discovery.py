@@ -31,7 +31,11 @@ def discover_rule_classes(packages):
             try:
                 module = importlib.import_module(module_name)
             except Exception as exc:
-                logger.exception("Failed to import rule module %s", module_name)
+                logger.exception(
+    "Failed to import rule module %s: %s",
+    module_name,
+    exc,
+)
                 continue
             for rule_class in _discover_from_module(module):
                 if rule_class not in seen:

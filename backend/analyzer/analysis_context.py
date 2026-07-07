@@ -1,59 +1,201 @@
-﻿from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+﻿"""
+Shared semantic analysis context.
 
-from analyzer.declaration_model import Declaration, extract_declarations_from_source
+The AnalysisContext performs source analysis once and
+provides reusable semantic information to all MISRA rules.
+"""
 
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional
+
+from analyzer.ast_visitor import ASTVisitor
+from analyzer.initialization_analysis import (
+    build_initialization_tracker,
+)
 
 @dataclass(slots=True)
 class AnalysisContext:
-    file_path: str
-    source_code: str
-    available: bool = False
+    """
+    Shared analysis state for one translation unit.
+    """
+
+    code: str
+
+    file_path: str = ""
+
+    #
+    # Parsed representations
+    #
     ast: Any = None
-    parse_error: Optional[str] = None
-    symbol_table: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    type_information: List[Dict[str, Any]] = field(default_factory=list)
-    cfg: Any = None
-    visitor: Any = None
+
+    visitor: Optional[ASTVisitor] = None
+
+    #
+    # Semantic tables
+    #
+    declarations: list = field(default_factory=list)
+
+    functions: Dict[str, Any] = field(default_factory=dict)
+
+    declaration_table: Dict[str, Any] = field(default_factory=dict)
+
+    parsed_types: Dict[str, Any] = field(default_factory=dict)
+
+    symbol_table: Dict[str, Any] = field(default_factory=dict)
+
+    call_graph: Dict[str, set] = field(default_factory=dict)
+
+    identifiers: list = field(default_factory=list)
+
+    loops: list = field(default_factory=list)
+
+    conditionals: list = field(default_factory=list)
+
     metadata: Dict[str, Any] = field(default_factory=dict)
-    declarations: List[Declaration] = field(default_factory=list)
-    typedefs: Dict[str, Declaration] = field(default_factory=dict)
-    storage_classes: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
-    qualifiers: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
-    signedness: Dict[str, Optional[str]] = field(default_factory=dict)
 
-    def __post_init__(self):
-        if self.declarations:
-            self.declarations = [Declaration.from_mapping(declaration) for declaration in self.declarations]
-        self.refresh_indexes()
+    initialization_tracker: Any = None
 
-    def get_declarations(self, kind: Optional[str] = None):
-        self.ensure_declarations()
-        if kind is None:
-            return list(self.declarations)
-        return [decl for decl in self.declarations if decl.kind == kind]
+    def build(self):
+        """
+        Build semantic information.
+        """
 
-    def set_declarations(self, declarations: List[Any]):
-        self.declarations = [Declaration.from_mapping(declaration) for declaration in declarations or []]
-        self.refresh_indexes()
+        self.visitor = ASTVisitor()
 
-    def ensure_declarations(self):
-        if self.declarations or not self.available or not self.source_code:
-            return
-        self.declarations = extract_declarations_from_source(self.source_code)
-        self.refresh_indexes()
+        #
+        # Current implementation starts from source text.
+        #
+        self.visitor.visit(
+            self.code
+        )
 
-    def refresh_indexes(self):
-        self.typedefs = {}
-        self.storage_classes = {}
-        self.qualifiers = {}
-        self.signedness = {}
+        self.declarations = (
+            self.visitor.declarations
+        )
 
-        for declaration in self.declarations:
-            if not declaration.name:
-                continue
-            if declaration.kind == "typedef":
-                self.typedefs[declaration.name] = declaration
-            self.storage_classes[declaration.name] = declaration.storage_specifiers
-            self.qualifiers[declaration.name] = declaration.qualifiers
-            self.signedness[declaration.name] = declaration.signedness
+        #
+        # Fast declaration lookup.
+        #
+        self.declaration_table = {
+            declaration.name: declaration
+            for declaration in self.declarations
+            if getattr(declaration, "name", None)
+        }
+
+        from analyzer.type_system import (
+            parse_type,
+        )
+
+        self.parsed_types = {
+            declaration.name: parse_type(
+                declaration.type_name
+            )
+            for declaration in self.declarations
+            if declaration.name
+        }
+
+        self.symbol_table = {
+    declaration.name: {
+        "declaration": declaration,
+        "ctype": self.parsed_types[
+            declaration.name
+        ],
+        "initialized": False,
+        "kind": declaration.kind,
+        "storage_specifiers": list(
+            declaration.storage_specifiers
+        ),
+        "qualifiers": list(
+            declaration.qualifiers
+        ),
+    }
+    for declaration in self.declarations
+    if declaration.name
+}
+
+        self.functions = (
+            self.visitor.functions
+        )
+
+        self.call_graph = (
+            self.visitor.build_call_graph()
+        )
+
+        self.identifiers = (
+            self.visitor.identifiers
+        )
+
+        self.loops = (
+            self.visitor.loops
+        )
+
+        self.conditionals = (
+            self.visitor.conditionals
+        )
+
+        self.initialization_tracker = (
+    build_initialization_tracker(
+        self.code
+    )
+)
+
+        return self
+    
+
+    
+    @property
+    def function_count(self):
+        return len(self.functions)
+
+
+    @property
+    def declaration_count(self):
+        return len(self.declarations)
+
+
+    @property
+    def identifier_count(self):
+        return len(self.identifiers)
+
+
+    @property
+    def loop_count(self):
+        return len(self.loops)
+
+
+    @property
+    def conditional_count(self):
+        return len(self.conditionals)
+    
+    def lookup(self, name):
+        """
+        Return symbol information by identifier.
+        """
+
+        return self.symbol_table.get(name)
+
+
+    def lookup_type(self, name):
+        """
+        Return parsed CType.
+        """
+
+        symbol = self.lookup(name)
+
+        if symbol is None:
+            return None
+
+        return symbol["ctype"]
+
+
+    def lookup_declaration(self, name):
+        """
+        Return declaration object.
+        """
+
+        symbol = self.lookup(name)
+
+        if symbol is None:
+            return None
+
+        return symbol["declaration"]

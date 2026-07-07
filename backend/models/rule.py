@@ -5,22 +5,43 @@ from typing import Any, Dict, Tuple
 def _normalize_capabilities(values):
     if values is None:
         return ("text",)
+
     if isinstance(values, str):
         values = (values,)
 
     normalized = []
+
+    supported_capabilities = {
+        "text",
+        "ast",
+        "hybrid",
+        "semantic",
+    }
+
     for value in values:
+
         if not isinstance(value, str):
-            raise TypeError("Rule capabilities must be strings.")
+            raise TypeError(
+                "Rule capabilities must be strings."
+            )
+
         capability = value.strip().lower()
-        if capability not in {"text", "ast", "hybrid"}:
-            raise ValueError(f"Unsupported rule capability: {value}")
+
+        if capability not in supported_capabilities:
+            raise ValueError(
+                f"Unsupported rule capability: {value}"
+            )
+
         if capability == "hybrid":
+
             if "text" not in normalized:
                 normalized.append("text")
+
             if "ast" not in normalized:
                 normalized.append("ast")
+
             continue
+
         if capability not in normalized:
             normalized.append(capability)
 

@@ -10,13 +10,91 @@ _HEX_OR_OCTAL_LITERAL_PATTERN = re.compile(
     r"(?<![0-9A-Za-z_\\.])(?:0[xX][0-9A-Fa-f]+|0[0-7]+)(?![0-9A-Za-z_\\.])"
 )
 _INTEGER_LITERAL_PATTERN = re.compile(
-    r"(?<![0-9A-Za-z_\\.])(?:0[xX][0-9A-Fa-f]+|0[0-7]+|[0-9]+)([uUlL]+)?(?![0-9A-Za-z_\\.])"
+    r"\b(?:0[xX][0-9A-Fa-f]+|\d+)([uUlL]*)\b"
 )
 _STRING_LITERAL_PATTERN = re.compile(r'"(?:\\.|[^"\\])*"')
 _CHARACTER_LITERAL_PATTERN = re.compile(r"'(?:\\.|[^'\\])'")
 _MULTI_CHARACTER_LITERAL_PATTERN = re.compile(r"'(?:\\.|[^'\\]){2,}'")
 _WIDE_CHARACTER_LITERAL_PATTERN = re.compile(r"(?:^|[^A-Za-z0-9_])(L|u8|u|U)'(?:\\.|[^'\\])'")
 
+# ---------------------------------------------------------------------
+# Chapter 13 Patterns
+# ---------------------------------------------------------------------
+
+_INCREMENT_PATTERN = re.compile(
+    r"(?:\+\+|--)"
+)
+
+_ASSIGNMENT_PATTERN = re.compile(
+    r"(?<![=!<>])=(?!=)"
+)
+
+_LOGICAL_PATTERN = re.compile(
+    r"(&&|\|\|)"
+)
+
+_FUNCTION_CALL_PATTERN = re.compile(
+    r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\("
+)
+
+_SIDE_EFFECT_FUNCTIONS = {
+    "malloc",
+    "calloc",
+    "realloc",
+    "free",
+    "printf",
+    "scanf",
+    "sprintf",
+    "snprintf",
+    "strcpy",
+    "strncpy",
+}
+
+_PERSISTENT_SIDE_EFFECT_FUNCTIONS = {
+    "malloc",
+    "calloc",
+    "realloc",
+    "free",
+    "printf",
+    "scanf",
+    "sprintf",
+    "snprintf",
+    "strcpy",
+    "strncpy",
+    "memcpy",
+    "memmove",
+    "fopen",
+    "fclose",
+    "fread",
+    "fwrite",
+}
+
+_ASSIGNMENT_AS_VALUE_PATTERN = re.compile(
+    r"""
+    (
+        if\s*\(\s*\([^)]*=[^=][^)]*\)
+        |
+        while\s*\(\s*\([^)]*=[^=][^)]*\)
+        |
+        return\s*\(\s*[^)]*=[^=][^)]*\)
+        |
+        [A-Za-z_]\w*\s*=\s*\([^)]*=[^=][^)]*\)
+    )
+    """,
+    re.VERBOSE,
+)
+
+_LOGICAL_SIDE_EFFECT_PATTERN = re.compile(
+    r"""
+    (&&|\|\|)
+    (.*)
+    """,
+    re.VERBOSE,
+)
+
+_SIZEOF_PATTERN = re.compile(
+    r"sizeof\s*\((.*?)\)"
+)
 
 class Rule71(BaseRule):
     RULE_ID = "7.1"
@@ -72,27 +150,58 @@ class Rule72(BaseRule):
 
     def check(self, code, file_path):
         violations = []
-        for line_number, raw_line in enumerate(code.splitlines(), start=1):
-            line = raw_line.strip()
-            if not line:
-                continue
 
-            cleaned_line = strip_string_literals(strip_comments(line))
+        for line_number, raw_line in enumerate(code.splitlines(), start=1):
+
+            cleaned_line = strip_string_literals(
+            strip_comments(raw_line)
+        )
+
             for match in _HEX_OR_OCTAL_LITERAL_PATTERN.finditer(cleaned_line):
+
                 literal = match.group(0)
+
+            #
+            # Already unsigned.
+            #
                 if re.search(r"[uU]", literal):
                     continue
-                violations.append(
-                    self.create_violation(
-                        file_path=file_path,
-                        line=line_number,
-                        original=line,
-                        explanation=(
-                            f"Hexadecimal or octal literal '{literal}' should include an unsigned suffix such as 'u' or 'U'."
-                        ),
-                    )
+
+            #
+            # Ignore zero.
+            #
+                if literal == "0":
+                    continue
+
+            #
+            # Decimal literals are not covered.
+            #
+                if not (
+                literal.lower().startswith("0x")
+                or (
+                    literal.startswith("0")
+                    and len(literal) > 1
                 )
+            ):
+                    continue
+
+                violations.append(
+                self.create_violation(
+                    file_path=file_path,
+                    line=line_number,
+                    original=raw_line,
+                    explanation=(
+                        f"Unsigned hexadecimal/octal constant "
+                        f"'{literal}' should use a 'U' suffix."
+                    ),
+                    suggestion=(
+                        f"Use '{literal}U'."
+                    ),
+                )
+            )
+
                 break
+
         return violations
 
 
@@ -272,8 +381,7 @@ class Rule77(BaseRule):
             candidate_line = strip_comments(line)
             for match in _WIDE_CHARACTER_LITERAL_PATTERN.finditer(candidate_line):
                 literal = match.group(0).strip()
-                if re.search(r"\bconst\b", candidate_line):
-                    continue
+                
                 violations.append(
                     self.create_violation(
                         file_path=file_path,
@@ -285,3 +393,592 @@ class Rule77(BaseRule):
                 break
         return violations
 
+# ---------------------------------------------------------------------
+# Rule 13.2
+# ---------------------------------------------------------------------
+
+class Rule132(BaseRule):
+    """
+    MISRA C:2012 Rule 13.2
+
+    Expressions shall have the same value and persistent
+    side effects regardless of evaluation order.
+    """
+
+    RULE_ID = "13.2"
+
+    TITLE = "No undefined evaluation order"
+
+    CHAPTER = "13"
+
+    CATEGORY = "Expressions"
+
+    SEVERITY = "Required"
+
+    DESCRIPTION = (
+        "Expressions shall not depend upon undefined "
+        "evaluation order."
+    )
+
+    RATIONALE = (
+        "Avoid expressions whose value depends on compiler "
+        "evaluation order."
+    )
+
+    FIXABLE = False
+
+    PRIORITY = 132
+
+    CAPABILITIES = ("text",)
+
+    def check(
+        self,
+        code,
+        file_path,
+    ):
+
+        violations = []
+
+        for line_number, raw_line in enumerate(
+            code.splitlines(),
+            start=1,
+        ):
+
+            line = strip_comments(
+                strip_string_literals(raw_line)
+            ).strip()
+
+            if not line:
+                continue
+
+            increment_count = len(
+                _INCREMENT_PATTERN.findall(
+                    line
+                )
+            )
+
+            assignment_count = len(
+                _ASSIGNMENT_PATTERN.findall(
+                    line
+                )
+            )
+
+            logical_count = len(
+                _LOGICAL_PATTERN.findall(
+                    line
+                )
+            )
+
+            if (
+                increment_count >= 2
+                or
+                (
+                    increment_count >= 1
+                    and logical_count >= 1
+                )
+                or
+                (
+                    assignment_count >= 2
+                )
+            ):
+
+                violations.append(
+                    self.create_violation(
+                        file_path=file_path,
+                        line=line_number,
+                        original=raw_line,
+                        suggestion=(
+                            "Split the expression into "
+                            "multiple statements."
+                        ),
+                        explanation=(
+                            "Expression may depend on "
+                            "evaluation order."
+                        ),
+                    )
+                )
+
+        return violations
+    
+
+# ---------------------------------------------------------------------
+# Rule 13.3
+# ---------------------------------------------------------------------
+
+
+class Rule133(BaseRule):
+    """
+    MISRA C:2012 Rule 13.3
+
+    A full expression containing ++ or --
+    should contain no other side effects.
+    """
+
+    RULE_ID = "13.3"
+
+    TITLE = (
+        "Increment/decrement expressions "
+        "shall not contain additional side effects"
+    )
+
+    CHAPTER = "13"
+
+    CATEGORY = "Expressions"
+
+    SEVERITY = "Advisory"
+
+    DESCRIPTION = (
+        "Expressions containing increment or decrement "
+        "operators should not contain other side effects."
+    )
+
+    RATIONALE = (
+        "Separating side effects improves readability "
+        "and avoids subtle bugs."
+    )
+
+    FIXABLE = False
+
+    PRIORITY = 133
+
+    CAPABILITIES = ("text",)
+
+    def check(
+        self,
+        code,
+        file_path,
+    ):
+
+        violations = []
+
+        for line_number, raw_line in enumerate(
+            code.splitlines(),
+            start=1,
+        ):
+
+            line = strip_comments(
+                strip_string_literals(raw_line)
+            ).strip()
+
+            if not line:
+                continue
+
+            #
+            # No ++ / -- ?
+            #
+            if not _INCREMENT_PATTERN.search(line):
+                continue
+
+            #
+            # Another assignment?
+            #
+            assignment_count = len(
+                _ASSIGNMENT_PATTERN.findall(line)
+            )
+
+            #
+            # Function call?
+            #
+            function_calls = [
+                match.group(1)
+                for match in _FUNCTION_CALL_PATTERN.finditer(line)
+                if match.group(1)
+                not in {
+                    "if",
+                    "while",
+                    "for",
+                    "switch",
+                    "sizeof",
+                }
+            ]
+
+            if (
+                assignment_count >= 1
+                or len(function_calls) >= 1
+            ):
+
+                violations.append(
+                    self.create_violation(
+                        file_path=file_path,
+                        line=line_number,
+                        original=raw_line,
+                        suggestion=(
+                            "Move increment/decrement "
+                            "into its own statement."
+                        ),
+                        explanation=(
+                            "Increment/decrement is combined "
+                            "with another side effect."
+                        ),
+                    )
+                )
+
+        return violations
+    
+
+# ---------------------------------------------------------------------
+# Rule 13.4
+# ---------------------------------------------------------------------
+
+
+class Rule134(BaseRule):
+    """
+    MISRA C:2012 Rule 13.4
+
+    The result of an assignment operator should not be used.
+    """
+
+    RULE_ID = "13.4"
+
+    TITLE = "Assignment result shall not be used"
+
+    CHAPTER = "13"
+
+    CATEGORY = "Expressions"
+
+    SEVERITY = "Advisory"
+
+    DESCRIPTION = (
+        "The value produced by an assignment operator "
+        "should not be used."
+    )
+
+    RATIONALE = (
+        "Assignments used as expressions reduce "
+        "clarity and are error-prone."
+    )
+
+    FIXABLE = False
+
+    PRIORITY = 134
+
+    CAPABILITIES = ("text",)
+
+    def check(
+        self,
+        code,
+        file_path,
+    ):
+
+        violations = []
+
+        for line_number, raw_line in enumerate(
+            code.splitlines(),
+            start=1,
+        ):
+
+            line = strip_comments(
+                strip_string_literals(raw_line)
+            ).strip()
+
+            if not line:
+                continue
+
+            if not _ASSIGNMENT_AS_VALUE_PATTERN.search(
+                line
+            ):
+                continue
+
+            violations.append(
+                self.create_violation(
+                    file_path=file_path,
+                    line=line_number,
+                    original=raw_line,
+                    suggestion=(
+                        "Separate the assignment from "
+                        "the expression."
+                    ),
+                    explanation=(
+                        "Assignment result is used "
+                        "as a value."
+                    ),
+                )
+            )
+
+        return violations
+    
+
+# ---------------------------------------------------------------------
+# Rule 13.5
+# ---------------------------------------------------------------------
+
+
+class Rule135(BaseRule):
+    """
+    MISRA C:2012 Rule 13.5
+
+    The right-hand operand of && or ||
+    shall not contain persistent side effects.
+    """
+
+    RULE_ID = "13.5"
+
+    TITLE = (
+        "Logical RHS shall not contain "
+        "persistent side effects"
+    )
+
+    CHAPTER = "13"
+
+    CATEGORY = "Expressions"
+
+    SEVERITY = "Required"
+
+    DESCRIPTION = (
+        "The right-hand operand of && and || "
+        "shall not contain persistent side effects."
+    )
+
+    RATIONALE = (
+        "Short-circuit evaluation can prevent the "
+        "right-hand operand from executing."
+    )
+
+    FIXABLE = False
+
+    PRIORITY = 135
+
+    CAPABILITIES = ("text",)
+
+    def check(
+        self,
+        code,
+        file_path,
+    ):
+
+        violations = []
+
+        for line_number, raw_line in enumerate(
+            code.splitlines(),
+            start=1,
+        ):
+
+            line = strip_comments(
+                strip_string_literals(raw_line)
+            )
+
+            match = _LOGICAL_SIDE_EFFECT_PATTERN.search(
+                line
+            )
+
+            if match is None:
+                continue
+
+            rhs = match.group(2)
+
+            #
+            # ++ or --
+            #
+            if _INCREMENT_PATTERN.search(rhs):
+
+                violations.append(
+                    self.create_violation(
+                        file_path=file_path,
+                        line=line_number,
+                        original=raw_line,
+                        explanation=(
+                            "Right-hand operand contains "
+                            "increment/decrement."
+                        ),
+                    )
+                )
+
+                continue
+
+            #
+            # Assignment
+            #
+            if _ASSIGNMENT_PATTERN.search(rhs):
+
+                violations.append(
+                    self.create_violation(
+                        file_path=file_path,
+                        line=line_number,
+                        original=raw_line,
+                        explanation=(
+                            "Right-hand operand contains "
+                            "an assignment."
+                        ),
+                    )
+                )
+
+                continue
+
+            #
+            # Function calls
+            #
+            for function in _FUNCTION_CALL_PATTERN.finditer(
+                rhs
+            ):
+
+                name = function.group(1)
+
+                if (
+                    name
+                    in _PERSISTENT_SIDE_EFFECT_FUNCTIONS
+                ):
+
+                    violations.append(
+                        self.create_violation(
+                            file_path=file_path,
+                            line=line_number,
+                            original=raw_line,
+                            explanation=(
+                                f"Function '{name}' may "
+                                "have persistent side effects "
+                                "inside a logical RHS."
+                            ),
+                        )
+                    )
+
+                    break
+
+        return violations
+    
+
+# ---------------------------------------------------------------------
+# Rule 13.6
+# ---------------------------------------------------------------------
+
+
+class Rule136(BaseRule):
+    """
+    MISRA C:2012 Rule 13.6
+
+    The operand of sizeof shall not contain
+    expressions with side effects.
+    """
+
+    RULE_ID = "13.6"
+
+    TITLE = "sizeof operand shall have no side effects"
+
+    CHAPTER = "13"
+
+    CATEGORY = "Expressions"
+
+    SEVERITY = "Required"
+
+    DESCRIPTION = (
+        "The operand of sizeof shall not contain "
+        "side effects."
+    )
+
+    RATIONALE = (
+        "Although sizeof does not evaluate its operand, "
+        "placing expressions with side effects inside it "
+        "is misleading."
+    )
+
+    FIXABLE = False
+
+    PRIORITY = 136
+
+    CAPABILITIES = ("text",)
+
+    def check(
+        self,
+        code,
+        file_path,
+    ):
+
+        violations = []
+
+        for line_number, raw_line in enumerate(
+            code.splitlines(),
+            start=1,
+        ):
+
+            line = strip_comments(
+                strip_string_literals(raw_line)
+            )
+
+            for match in _SIZEOF_PATTERN.finditer(line):
+
+                operand = match.group(1)
+
+                #
+                # ++ or --
+                #
+                if _INCREMENT_PATTERN.search(
+                    operand
+                ):
+
+                    violations.append(
+                        self.create_violation(
+                            file_path=file_path,
+                            line=line_number,
+                            original=raw_line,
+                            explanation=(
+                                "sizeof operand contains "
+                                "increment/decrement."
+                            ),
+                        )
+                    )
+
+                    continue
+
+                #
+                # Assignment
+                #
+                if _ASSIGNMENT_PATTERN.search(
+                    operand
+                ):
+
+                    violations.append(
+                        self.create_violation(
+                            file_path=file_path,
+                            line=line_number,
+                            original=raw_line,
+                            explanation=(
+                                "sizeof operand contains "
+                                "an assignment."
+                            ),
+                        )
+                    )
+
+                    continue
+
+                #
+                # Function call
+                #
+                for function in _FUNCTION_CALL_PATTERN.finditer(
+                    operand
+                ):
+
+                    name = function.group(1)
+
+                    if name == "sizeof":
+                        continue
+
+                    violations.append(
+                        self.create_violation(
+                            file_path=file_path,
+                            line=line_number,
+                            original=raw_line,
+                            explanation=(
+                                f"sizeof operand contains "
+                                f"function call '{name}'."
+                            ),
+                        )
+                    )
+
+                    break
+
+        return violations
+    
+
+__all__ = (
+    "Rule71",
+    "Rule72",
+    "Rule73",
+    "Rule74",
+    "Rule75",
+    "Rule76",
+    "Rule77",
+    "Rule132",
+    "Rule133",
+    "Rule134",
+    "Rule135",
+    "Rule136",
+)
